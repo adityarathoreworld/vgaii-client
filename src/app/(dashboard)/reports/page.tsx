@@ -7,12 +7,8 @@ export default function ReportsPage() {
   return (
     <RoleGuard allow={["CLIENT_ADMIN"]}>
       <div className="space-y-3">
-        {/* No <h1> here — the TopBar already renders "Reports" as the page
-            title, and two H1s on one screen reads as a duplicate. */}
-        <p className="text-sm text-slate-500">
-          Funnel, source attribution, and clinical outcomes.
-        </p>
-
+        {/* No page header — the TopBar renders "Reports" and ReportsPanel
+            renders its own heading and subtitle. */}
         <ReportsPanel />
       </div>
     </RoleGuard>
