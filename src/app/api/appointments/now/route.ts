@@ -18,8 +18,12 @@ export async function GET(req: Request) {
 
     const scope = withClientFilter(user) as { clientId?: string };
     const now = Date.now();
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const startOfTomorrow = new Date(startOfToday);
+    startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
 
-    const [active, next] = await Promise.all([
+    const [active, next, todayCount] = await Promise.all([
       prisma.appointment.findFirst({
         where: {
           ...scope,
@@ -39,9 +43,19 @@ export async function GET(req: Request) {
         },
         orderBy: { date: "asc" },
       }),
+      // All scheduled appointments dated today (regardless of completed/no_show
+      // status — those would be in History anyway). Useful as a quick "what's
+      // on the books for today" counter on the dashboard.
+      prisma.appointment.count({
+        where: {
+          ...scope,
+          status: "scheduled",
+          date: { gte: startOfToday, lt: startOfTomorrow },
+        },
+      }),
     ]);
 
-    return NextResponse.json({ active, next });
+    return NextResponse.json({ active, next, todayCount });
   } catch (err: unknown) {
     return NextResponse.json({ error: getErrorMessage(err) }, { status: 500 });
   }

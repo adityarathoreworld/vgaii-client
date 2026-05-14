@@ -18,6 +18,7 @@ type Appointment = {
 type Response = {
   active: Appointment | null;
   next: Appointment | null;
+  todayCount?: number;
 };
 
 // Reuse the same endpoint the Appointments page polls so the dashboard
@@ -29,11 +30,19 @@ export default function NextAppointmentCard() {
 
   const appointment = data?.active ?? data?.next ?? null;
   const label = data?.active ? "Active appointment" : "Next appointment";
+  const todayCount = data?.todayCount ?? 0;
 
   return (
     <div className="flex h-full flex-col rounded-lg border border-slate-200 bg-white px-4 py-3">
       <div className="flex items-start justify-between gap-2">
-        <h2 className="text-base font-semibold text-slate-900">{label}</h2>
+        <div>
+          <h2 className="text-base font-semibold text-slate-900">{label}</h2>
+          <p className="text-[11px] text-slate-500">
+            {todayCount === 0
+              ? "No appointments today"
+              : `${todayCount} ${todayCount === 1 ? "appointment" : "appointments"} today`}
+          </p>
+        </div>
         <Link
           href="/appointments"
           className="text-xs font-medium text-indigo-600 hover:underline"
