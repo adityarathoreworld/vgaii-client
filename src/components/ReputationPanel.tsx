@@ -49,7 +49,7 @@ export default function ReputationPanel({
     typeof businessInfo.totalReviews === "number";
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white">
+    <section className="flex h-full flex-col rounded-lg border border-slate-200 bg-white">
       <header className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5">
         <div>
           <h2 className="inline-flex items-center gap-2 text-base font-semibold text-slate-900">
@@ -71,7 +71,7 @@ export default function ReputationPanel({
         </Link>
       </header>
 
-      <div className="grid grid-cols-1 divide-y divide-slate-200 md:grid-cols-2 md:divide-x md:divide-y-0">
+      <div className="grid flex-1 grid-cols-1 divide-y divide-slate-200 md:grid-cols-2 md:divide-x md:divide-y-0">
         {/* Google reviews */}
         <div className="px-4 py-2.5">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">

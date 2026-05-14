@@ -77,7 +77,7 @@ export default function BusinessInfoCard({
 
   if (!businessInfo || !businessInfo.name) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+      <div className="flex h-full flex-col rounded-lg border border-slate-200 bg-white px-4 py-3">
         <h2 className="font-semibold text-slate-900">
           Connect your Google Business profile
         </h2>
@@ -104,8 +104,8 @@ export default function BusinessInfoCard({
   const hoursToday = todayHours(businessInfo.hours);
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
-      <div className="flex flex-col gap-4 md:flex-row">
+    <div className="flex h-full flex-col rounded-lg border border-slate-200 bg-white px-4 py-3">
+      <div className="flex flex-1 flex-col gap-4 md:flex-row">
         <div className="shrink-0">
           {businessInfo.mainPhoto ? (
             // eslint-disable-next-line @next/next/no-img-element

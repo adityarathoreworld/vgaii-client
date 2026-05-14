@@ -47,9 +47,9 @@ const ACTIONS: Action[] = [
 
 export default function QuickActionsCard() {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+    <div className="flex h-full flex-col rounded-lg border border-slate-200 bg-white px-4 py-3">
       <h2 className="text-base font-semibold text-slate-900">Quick Actions</h2>
-      <div className="mt-3 grid grid-cols-2 gap-2">
+      <div className="mt-3 grid flex-1 grid-cols-2 gap-2">
         {ACTIONS.map(a => {
           const Icon = a.icon;
           return (

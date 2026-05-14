@@ -31,7 +31,7 @@ export default function NextAppointmentCard() {
   const label = data?.active ? "Active appointment" : "Next appointment";
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+    <div className="flex h-full flex-col rounded-lg border border-slate-200 bg-white px-4 py-3">
       <div className="flex items-start justify-between gap-2">
         <h2 className="text-base font-semibold text-slate-900">{label}</h2>
         <Link

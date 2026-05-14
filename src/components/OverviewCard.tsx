@@ -26,9 +26,9 @@ export default function OverviewCard({
   upcomingApptsDelta,
 }: Props) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+    <div className="flex h-full flex-col rounded-lg border border-slate-200 bg-white px-4 py-3">
       <h2 className="text-base font-semibold text-slate-900">Overview</h2>
-      <div className="mt-3 space-y-3 divide-y divide-slate-100">
+      <div className="mt-3 flex flex-1 flex-col justify-evenly divide-y divide-slate-100">
         <Row
           icon={TrendingUp}
           iconClass="bg-emerald-100 text-emerald-600"
