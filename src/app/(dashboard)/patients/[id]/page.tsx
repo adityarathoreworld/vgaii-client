@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Calendar, Globe, Mail, MapPin, Phone } from "lucide-react";
@@ -8,6 +8,9 @@ import StatusPill from "@/components/StatusPill";
 import RoleGuard from "@/components/RoleGuard";
 import BookingEmbed from "@/components/BookingEmbed";
 import AttachmentsSection from "@/components/AttachmentsSection";
+import VitalsTrendChart, {
+  type VitalsPoint,
+} from "@/components/charts/VitalsTrendChart";
 import { type LeadStatus } from "@/lib/constants";
 
 type DetailTab = "overview" | "appointments" | "medical-history";
@@ -576,25 +579,10 @@ function PatientDetailPageInner({
 
       {tab === "medical-history" && (
         <div className="space-y-3">
-          <section>
-            <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Medical history ({past.filter(a => a.status === "completed").length})
-            </h2>
-            {past.filter(a => a.status === "completed").length === 0 ? (
-              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">
-                No past visits yet. After the first appointment is completed,
-                its diagnosis and medicines will appear here.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {past
-                  .filter(a => a.status === "completed")
-                  .map(a => (
-                    <AppointmentCard key={a.id} {...apptCardProps(a)} />
-                  ))}
-              </div>
-            )}
-          </section>
+          <MedicalHistory
+            appointments={past.filter(a => a.status === "completed")}
+            apptCardProps={apptCardProps}
+          />
 
           {feedbacks.length > 0 && (
             <section>
@@ -1168,6 +1156,126 @@ function AppointmentCard({
         )
       )}
     </article>
+  );
+}
+
+function MedicalHistory({
+  appointments,
+  apptCardProps,
+}: {
+  appointments: Appointment[];
+  apptCardProps: (a: Appointment) => React.ComponentProps<typeof AppointmentCard>;
+}) {
+  // Sort oldest → newest for the trend chart's X axis (so the line goes
+  // left-to-right in time). The timeline below reverses to most-recent
+  // first, which matches how a clinician reads a chart.
+  const chronological = useMemo(
+    () =>
+      [...appointments]
+        .filter(a => a.date)
+        .sort((a, b) => new Date(a.date!).getTime() - new Date(b.date!).getTime()),
+    [appointments],
+  );
+
+  const weightPoints: VitalsPoint[] = chronological.map(a => ({
+    date: a.date!,
+    value: a.weightKg ?? null,
+  }));
+  const sugarPoints: VitalsPoint[] = chronological.map(a => ({
+    date: a.date!,
+    value: a.sugarMgDl ?? null,
+  }));
+  const bpPoints: VitalsPoint[] = chronological.map(a => ({
+    date: a.date!,
+    systolic: a.bpSystolic ?? null,
+    diastolic: a.bpDiastolic ?? null,
+  }));
+
+  // Reverse for the timeline so the latest visit is on top — same order
+  // the API returns past[] in, but explicit so future API changes don't
+  // surprise the layout.
+  const timeline = useMemo(
+    () =>
+      [...appointments]
+        .filter(a => a.date)
+        .sort((a, b) => new Date(b.date!).getTime() - new Date(a.date!).getTime()),
+    [appointments],
+  );
+
+  if (appointments.length === 0) {
+    return (
+      <section>
+        <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+          Medical history
+        </h2>
+        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">
+          No past visits yet. After the first appointment is completed, its
+          diagnosis and medicines will appear here.
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <section>
+        <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+          Vitals trend
+        </h2>
+        <div className="grid gap-3 md:grid-cols-3">
+          <VitalsTrendChart
+            title="Weight"
+            unit="kg"
+            color="#0ea5e9"
+            data={weightPoints}
+          />
+          <VitalsTrendChart
+            title="Sugar"
+            unit="mg/dL"
+            color="#f59e0b"
+            data={sugarPoints}
+          />
+          <VitalsTrendChart
+            title="Blood pressure"
+            unit="mmHg"
+            color="#f43f5e"
+            mode="bp"
+            data={bpPoints}
+          />
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+          Visits ({timeline.length})
+        </h2>
+        <ol className="relative ml-3 space-y-4 border-l-2 border-slate-200 pl-5">
+          {timeline.map(a => {
+            const dt = new Date(a.date!);
+            return (
+              <li key={a.id} className="relative">
+                {/* Dot marker on the timeline */}
+                <span
+                  className="absolute -left-[27px] top-1.5 inline-flex h-3 w-3 items-center justify-center rounded-full border-2 border-white bg-indigo-500 shadow"
+                  aria-hidden
+                />
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  {dt.toLocaleDateString(undefined, {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </p>
+                <div className="mt-2">
+                  <AppointmentCard {...apptCardProps(a)} />
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+    </div>
   );
 }
 
