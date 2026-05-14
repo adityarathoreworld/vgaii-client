@@ -20,6 +20,10 @@ type Appointment = {
   notes?: string;
   diagnosis?: string;
   medicines?: string[];
+  weightKg?: number | null;
+  sugarMgDl?: number | null;
+  bpSystolic?: number | null;
+  bpDiastolic?: number | null;
 };
 
 type Tab = "upcoming" | "history" | "calendar";
@@ -211,6 +215,12 @@ function AppointmentsPageInner() {
   const [editDiagnosis, setEditDiagnosis] = useState("");
   const [editMedicines, setEditMedicines] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  // Vitals captured at completion. All optional — stored as strings here
+  // so a blank field saves as null on the server.
+  const [editWeight, setEditWeight] = useState("");
+  const [editSugar, setEditSugar] = useState("");
+  const [editBpSys, setEditBpSys] = useState("");
+  const [editBpDia, setEditBpDia] = useState("");
 
   // Per-row expand/collapse (only one open at a time keeps the page scannable)
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -307,8 +317,20 @@ function AppointmentsPageInner() {
     setEditDiagnosis(a.diagnosis ?? "");
     setEditMedicines((a.medicines ?? []).join("\n"));
     setEditNotes(a.notes ?? "");
+    setEditWeight(a.weightKg != null ? String(a.weightKg) : "");
+    setEditSugar(a.sugarMgDl != null ? String(a.sugarMgDl) : "");
+    setEditBpSys(a.bpSystolic != null ? String(a.bpSystolic) : "");
+    setEditBpDia(a.bpDiastolic != null ? String(a.bpDiastolic) : "");
   };
   const cancelEdit = () => setEditingId(null);
+
+  // Empty strings become explicit nulls so the user can clear a previously
+  // recorded vital. Non-numeric input is ignored (undefined → no update).
+  const vitalOrNull = (raw: string): number | null | undefined => {
+    if (raw.trim() === "") return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : undefined;
+  };
 
   const saveEdit = async (id: string) => {
     await patch(id, {
@@ -319,6 +341,10 @@ function AppointmentsPageInner() {
       medicines: editMedicines
         ? editMedicines.split("\n").map(s => s.trim()).filter(Boolean)
         : [],
+      weightKg: vitalOrNull(editWeight),
+      sugarMgDl: vitalOrNull(editSugar),
+      bpSystolic: vitalOrNull(editBpSys),
+      bpDiastolic: vitalOrNull(editBpDia),
     });
     setEditingId(null);
   };
@@ -568,7 +594,11 @@ function AppointmentsPageInner() {
                   const hasDetails =
                     !!a.diagnosis ||
                     (!!a.medicines && a.medicines.length > 0) ||
-                    !!a.notes;
+                    !!a.notes ||
+                    a.weightKg != null ||
+                    a.sugarMgDl != null ||
+                    a.bpSystolic != null ||
+                    a.bpDiastolic != null;
                   const dt = new Date(a.date);
                   return (
                     <Fragment key={a.id}>
@@ -740,6 +770,35 @@ function AppointmentsPageInner() {
                                     className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                                   />
                                 </label>
+                                <div>
+                                  <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+                                    Vitals (optional)
+                                  </p>
+                                  <div className="mt-1 grid grid-cols-2 gap-3 md:grid-cols-4">
+                                    <VitalInput
+                                      label="Weight (kg)"
+                                      value={editWeight}
+                                      onChange={setEditWeight}
+                                    />
+                                    <VitalInput
+                                      label="Sugar (mg/dL)"
+                                      value={editSugar}
+                                      onChange={setEditSugar}
+                                    />
+                                    <VitalInput
+                                      label="BP Systolic"
+                                      value={editBpSys}
+                                      onChange={setEditBpSys}
+                                      placeholder="120"
+                                    />
+                                    <VitalInput
+                                      label="BP Diastolic"
+                                      value={editBpDia}
+                                      onChange={setEditBpDia}
+                                      placeholder="80"
+                                    />
+                                  </div>
+                                </div>
                                 <AttachmentsSection appointmentId={a.id} canEdit />
                                 <div className="flex justify-end gap-2">
                                   <button
@@ -790,6 +849,7 @@ function AppointmentsPageInner() {
                                         {a.notes}
                                       </p>
                                     )}
+                                    <VitalsBadges appointment={a} />
                                   </div>
                                 ) : (
                                   <p className="text-xs italic text-slate-400">
@@ -858,6 +918,66 @@ function AppointmentsPageInner() {
         )}
       </div>
       )}
+    </div>
+  );
+}
+
+function VitalInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+        {label}
+      </span>
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        inputMode="decimal"
+        placeholder={placeholder}
+        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+      />
+    </label>
+  );
+}
+
+function VitalsBadges({ appointment: a }: { appointment: Appointment }) {
+  const hasAny =
+    a.weightKg != null ||
+    a.sugarMgDl != null ||
+    a.bpSystolic != null ||
+    a.bpDiastolic != null;
+  if (!hasAny) return null;
+  return (
+    <div>
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+        Vitals
+      </p>
+      <div className="mt-1 flex flex-wrap gap-1.5 text-xs">
+        {a.weightKg != null && (
+          <span className="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 font-medium text-sky-700">
+            Weight {a.weightKg} kg
+          </span>
+        )}
+        {a.sugarMgDl != null && (
+          <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
+            Sugar {a.sugarMgDl} mg/dL
+          </span>
+        )}
+        {(a.bpSystolic != null || a.bpDiastolic != null) && (
+          <span className="inline-flex items-center rounded-full bg-rose-50 px-2 py-0.5 font-medium text-rose-700">
+            BP {a.bpSystolic ?? "—"}/{a.bpDiastolic ?? "—"}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

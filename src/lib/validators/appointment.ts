@@ -17,6 +17,11 @@ export const appointmentCreateSchema = z.object({
   leadId: z.string().min(1).max(60).optional(),
 });
 
+// Vitals fields accept null so the UI can explicitly clear a previously
+// recorded value (sending an empty string would otherwise be ignored).
+const optionalNullableNumber = z.number().finite().nullable().optional();
+const optionalNullableInt = z.number().int().nullable().optional();
+
 export const appointmentUpdateSchema = z
   .object({
     status: z.enum(APPOINTMENT_STATUSES).optional(),
@@ -29,6 +34,25 @@ export const appointmentUpdateSchema = z
     email: z.string().max(120).optional(),
     age: z.number().int().min(0).max(150).optional(),
     gender: z.string().max(40).optional(),
+    // Optional vitals captured at completion. Loose ranges so we don't
+    // reject legitimate edge cases (e.g. paediatric patients on the low
+    // side of weight).
+    weightKg: optionalNullableNumber.refine(
+      v => v === undefined || v === null || (v >= 0 && v <= 500),
+      "Weight must be between 0 and 500 kg",
+    ),
+    sugarMgDl: optionalNullableNumber.refine(
+      v => v === undefined || v === null || (v >= 0 && v <= 1000),
+      "Sugar level must be between 0 and 1000 mg/dL",
+    ),
+    bpSystolic: optionalNullableInt.refine(
+      v => v === undefined || v === null || (v >= 0 && v <= 300),
+      "BP systolic must be between 0 and 300",
+    ),
+    bpDiastolic: optionalNullableInt.refine(
+      v => v === undefined || v === null || (v >= 0 && v <= 200),
+      "BP diastolic must be between 0 and 200",
+    ),
     // Was an ObjectId-hex regex; cuid is 25 chars of [a-z0-9]. Loosen to a
     // permissive ID shape so we don't reject valid Prisma cuids.
     leadId: z

@@ -39,6 +39,10 @@ type Appointment = {
   diagnosis?: string;
   medicines?: string[];
   completedAt?: string;
+  weightKg?: number | null;
+  sugarMgDl?: number | null;
+  bpSystolic?: number | null;
+  bpDiastolic?: number | null;
 };
 
 type Feedback = {
@@ -107,6 +111,10 @@ function PatientDetailPageInner({
   const [editDiagnosis, setEditDiagnosis] = useState("");
   const [editMedicines, setEditMedicines] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [editWeight, setEditWeight] = useState("");
+  const [editSugar, setEditSugar] = useState("");
+  const [editBpSys, setEditBpSys] = useState("");
+  const [editBpDia, setEditBpDia] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
   const [busyApptId, setBusyApptId] = useState<string | null>(null);
 
@@ -178,28 +186,34 @@ function PatientDetailPageInner({
     }
   };
 
-  const startEdit = (a: Appointment) => {
-    setEditingId(a.id);
-    setExpandedApptId(a.id);
-    setEditDate(
-      a.date ? new Date(a.date).toISOString().slice(0, 16) : "",
-    );
-    setEditStatus(a.status ?? "scheduled");
-    setEditDiagnosis(a.diagnosis ?? "");
-    setEditMedicines((a.medicines ?? []).join("\n"));
-    setEditNotes(a.notes ?? "");
-  };
-
-  // Mark a scheduled appointment as visited — same form as edit but pre-set
-  // status to completed and skip the status dropdown.
-  const startMarkVisited = (a: Appointment) => {
+  const seedEditFromAppointment = (a: Appointment, status: string) => {
     setEditingId(a.id);
     setExpandedApptId(a.id);
     setEditDate(a.date ? new Date(a.date).toISOString().slice(0, 16) : "");
-    setEditStatus("completed");
+    setEditStatus(status);
     setEditDiagnosis(a.diagnosis ?? "");
     setEditMedicines((a.medicines ?? []).join("\n"));
     setEditNotes(a.notes ?? "");
+    setEditWeight(a.weightKg != null ? String(a.weightKg) : "");
+    setEditSugar(a.sugarMgDl != null ? String(a.sugarMgDl) : "");
+    setEditBpSys(a.bpSystolic != null ? String(a.bpSystolic) : "");
+    setEditBpDia(a.bpDiastolic != null ? String(a.bpDiastolic) : "");
+  };
+
+  const startEdit = (a: Appointment) =>
+    seedEditFromAppointment(a, a.status ?? "scheduled");
+
+  // Mark a scheduled appointment as visited — same form as edit but pre-set
+  // status to completed and skip the status dropdown.
+  const startMarkVisited = (a: Appointment) =>
+    seedEditFromAppointment(a, "completed");
+
+  // Empty strings become explicit nulls so the user can clear a previously
+  // recorded vital.
+  const vitalOrNull = (raw: string): number | null | undefined => {
+    if (raw.trim() === "") return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : undefined;
   };
 
   const markNoShow = async (apptId: string) => {
@@ -237,6 +251,10 @@ function PatientDetailPageInner({
                 .map(s => s.trim())
                 .filter(Boolean)
             : [],
+          weightKg: vitalOrNull(editWeight),
+          sugarMgDl: vitalOrNull(editSugar),
+          bpSystolic: vitalOrNull(editBpSys),
+          bpDiastolic: vitalOrNull(editBpDia),
         }),
       });
       if (res.ok) {
@@ -302,11 +320,19 @@ function PatientDetailPageInner({
       editDiagnosis,
       editMedicines,
       editNotes,
+      editWeight,
+      editSugar,
+      editBpSys,
+      editBpDia,
       setEditDate,
       setEditStatus,
       setEditDiagnosis,
       setEditMedicines,
       setEditNotes,
+      setEditWeight,
+      setEditSugar,
+      setEditBpSys,
+      setEditBpDia,
     },
     onMarkVisited: () => startMarkVisited(a),
     onNoShow: () => markNoShow(a.id),
@@ -844,11 +870,19 @@ type AppointmentCardEditState = {
   editDiagnosis: string;
   editMedicines: string;
   editNotes: string;
+  editWeight: string;
+  editSugar: string;
+  editBpSys: string;
+  editBpDia: string;
   setEditDate: (v: string) => void;
   setEditStatus: (v: string) => void;
   setEditDiagnosis: (v: string) => void;
   setEditMedicines: (v: string) => void;
   setEditNotes: (v: string) => void;
+  setEditWeight: (v: string) => void;
+  setEditSugar: (v: string) => void;
+  setEditBpSys: (v: string) => void;
+  setEditBpDia: (v: string) => void;
 };
 
 function AppointmentCard({
@@ -884,7 +918,13 @@ function AppointmentCard({
   const stripe = APPT_STRIPE[a.status ?? "scheduled"] ?? "border-l-slate-300";
   const isScheduled = a.status === "scheduled" || !a.status;
   const hasDetails =
-    !!a.diagnosis || (!!a.medicines && a.medicines.length > 0) || !!a.notes;
+    !!a.diagnosis ||
+    (!!a.medicines && a.medicines.length > 0) ||
+    !!a.notes ||
+    a.weightKg != null ||
+    a.sugarMgDl != null ||
+    a.bpSystolic != null ||
+    a.bpDiastolic != null;
   const dateStr = a.date
     ? new Date(a.date).toLocaleString(undefined, {
         weekday: "short",
@@ -1031,6 +1071,35 @@ function AppointmentCard({
               className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
             />
           </label>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+              Vitals (optional)
+            </p>
+            <div className="mt-1 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <VitalInput
+                label="Weight (kg)"
+                value={editState.editWeight}
+                onChange={editState.setEditWeight}
+              />
+              <VitalInput
+                label="Sugar (mg/dL)"
+                value={editState.editSugar}
+                onChange={editState.setEditSugar}
+              />
+              <VitalInput
+                label="BP Systolic"
+                value={editState.editBpSys}
+                onChange={editState.setEditBpSys}
+                placeholder="120"
+              />
+              <VitalInput
+                label="BP Diastolic"
+                value={editState.editBpDia}
+                onChange={editState.setEditBpDia}
+                placeholder="80"
+              />
+            </div>
+          </div>
           <AttachmentsSection appointmentId={a.id} canEdit />
           <div className="flex justify-end gap-2">
             <button
@@ -1087,6 +1156,7 @@ function AppointmentCard({
                     </p>
                   </div>
                 )}
+                <VitalsBadges appointment={a} />
               </div>
             ) : (
               <p className="text-xs italic text-slate-400">
@@ -1098,6 +1168,66 @@ function AppointmentCard({
         )
       )}
     </article>
+  );
+}
+
+function VitalInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+        {label}
+      </span>
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        inputMode="decimal"
+        placeholder={placeholder}
+        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+      />
+    </label>
+  );
+}
+
+function VitalsBadges({ appointment: a }: { appointment: Appointment }) {
+  const hasAny =
+    a.weightKg != null ||
+    a.sugarMgDl != null ||
+    a.bpSystolic != null ||
+    a.bpDiastolic != null;
+  if (!hasAny) return null;
+  return (
+    <div>
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+        Vitals
+      </p>
+      <div className="mt-1 flex flex-wrap gap-1.5 text-xs">
+        {a.weightKg != null && (
+          <span className="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 font-medium text-sky-700">
+            Weight {a.weightKg} kg
+          </span>
+        )}
+        {a.sugarMgDl != null && (
+          <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
+            Sugar {a.sugarMgDl} mg/dL
+          </span>
+        )}
+        {(a.bpSystolic != null || a.bpDiastolic != null) && (
+          <span className="inline-flex items-center rounded-full bg-rose-50 px-2 py-0.5 font-medium text-rose-700">
+            BP {a.bpSystolic ?? "—"}/{a.bpDiastolic ?? "—"}
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 

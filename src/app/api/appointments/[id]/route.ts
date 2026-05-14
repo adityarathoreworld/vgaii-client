@@ -57,6 +57,16 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     if (parsed.data.email !== undefined) data.email = parsed.data.email;
     if (parsed.data.age !== undefined) data.age = parsed.data.age;
     if (parsed.data.gender !== undefined) data.gender = parsed.data.gender;
+    if (parsed.data.weightKg !== undefined) data.weightKg = parsed.data.weightKg;
+    if (parsed.data.sugarMgDl !== undefined) {
+      data.sugarMgDl = parsed.data.sugarMgDl;
+    }
+    if (parsed.data.bpSystolic !== undefined) {
+      data.bpSystolic = parsed.data.bpSystolic;
+    }
+    if (parsed.data.bpDiastolic !== undefined) {
+      data.bpDiastolic = parsed.data.bpDiastolic;
+    }
 
     // Manual link to an existing lead (used to repair orphan appointments
     // when the booking-source didn't carry a matchable phone). Verify the
