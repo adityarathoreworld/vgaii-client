@@ -3,7 +3,7 @@
 import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Calendar, Globe, Mail, MapPin, Phone } from "lucide-react";
+import { ArrowLeft, CreditCard, Globe, Mail, MapPin, Phone } from "lucide-react";
 import StatusPill from "@/components/StatusPill";
 import RoleGuard from "@/components/RoleGuard";
 import BookingEmbed from "@/components/BookingEmbed";
@@ -302,13 +302,31 @@ function PatientDetailPageInner({
             <p className="text-sm text-slate-600">{meta || "—"}</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => setBookingOpen(true)}
-          className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
-        >
-          + Schedule appointment
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              const params = new URLSearchParams({
+                tab: "payment",
+                leadId: lead.id,
+                name: lead.name,
+                phone: lead.phone,
+              });
+              router.push(`/finances?${params.toString()}`);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-700 shadow-sm transition hover:bg-emerald-50"
+          >
+            <CreditCard size={14} />
+            Record payment
+          </button>
+          <button
+            type="button"
+            onClick={() => setBookingOpen(true)}
+            className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
+          >
+            + Schedule appointment
+          </button>
+        </div>
       </div>
 
       {/* TAB NAV */}
@@ -422,29 +440,12 @@ function PatientDetailPageInner({
             </div>
           </div>
 
-          {/* RIGHT COLUMN — Upcoming appointment + Funnel */}
-          <div className="space-y-3 lg:col-span-2">
-            <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
-              <p className="text-base font-semibold text-slate-900">
-                Upcoming appointment
-              </p>
-              {upcoming.length === 0 ? (
-                <div className="mt-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">
-                  No upcoming appointments. Click{" "}
-                  <strong>Schedule appointment</strong> to book one.
-                </div>
-              ) : (
-                <div className="mt-3 space-y-3">
-                  {upcoming.map(a => (
-                    <UpcomingAppointmentCard
-                      key={a.id}
-                      {...apptCardProps(a)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-
+          {/* RIGHT COLUMN — Medical history timeline */}
+          <div className="lg:col-span-2">
+            <MedicalHistory
+              appointments={past.filter(a => a.status === "completed")}
+              apptCardProps={apptCardProps}
+            />
           </div>
         </div>
       )}
@@ -671,89 +672,6 @@ function ContactRow({
       ) : (
         <span className="truncate">{text}</span>
       )}
-    </div>
-  );
-}
-
-// Compact card variant shown only on the Overview tab — emphasises the
-// date/time and the four core actions. Detailed appointment editing lives
-// on the Appointments tab via AppointmentCard.
-function UpcomingAppointmentCard({
-  appointment,
-  busy,
-  onMarkVisited,
-  onNoShow,
-  onEdit,
-  onDelete,
-}: {
-  appointment: Appointment;
-  isExpanded: boolean;
-  onToggleExpanded: () => void;
-  busy: boolean;
-  onMarkVisited: () => void;
-  onNoShow: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  const a = appointment;
-  const dt = a.date ? new Date(a.date) : null;
-  const dateStr = dt
-    ? dt.toLocaleString(undefined, {
-        weekday: "short",
-        day: "numeric",
-        month: "short",
-        hour: "numeric",
-        minute: "2-digit",
-      })
-    : "No date";
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 border-l-4 border-l-sky-500 bg-white px-4 py-3">
-      <div className="flex min-w-0 items-center gap-3">
-        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
-          <Calendar size={18} />
-        </span>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-slate-900">
-            {dateStr}
-          </p>
-          <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <StatusPill status={a.status ?? "scheduled"} />
-            {a.source && <span>via {a.source}</span>}
-          </p>
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <button
-          type="button"
-          onClick={onMarkVisited}
-          className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
-        >
-          Mark visited
-        </button>
-        <button
-          type="button"
-          onClick={onNoShow}
-          disabled={busy}
-          className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
-        >
-          No show
-        </button>
-        <button
-          type="button"
-          onClick={onEdit}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-        >
-          Edit
-        </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          disabled={busy}
-          className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
-        >
-          Delete
-        </button>
-      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import RoleGuard from "@/components/RoleGuard";
 import { useStoredUser } from "@/lib/client-auth";
 import PaymentEntryTab from "@/components/finances/PaymentEntryTab";
@@ -36,7 +37,30 @@ export default function FinancesPage() {
 function FinancesPageInner() {
   const user = useStoredUser();
   const isAdmin = user?.role === "CLIENT_ADMIN" || user?.role === "SUPER_ADMIN";
-  const [tab, setTab] = useState<Tab>("payment");
+
+  // ?tab=payment&leadId=…&name=…&phone=… lets other pages deep-link
+  // straight into a pre-filled payment entry form.
+  const searchParams = useSearchParams();
+  const initialTab = (() => {
+    const t = searchParams.get("tab");
+    return t === "payment" ||
+      t === "expense" ||
+      t === "summary" ||
+      t === "reports" ||
+      t === "presets"
+      ? (t as Tab)
+      : "payment";
+  })();
+  const [tab, setTab] = useState<Tab>(initialTab);
+  const prefillLead = (() => {
+    const id = searchParams.get("leadId");
+    if (!id) return undefined;
+    return {
+      id,
+      name: searchParams.get("name") ?? "",
+      phone: searchParams.get("phone") ?? "",
+    };
+  })();
 
   const visibleTabs = TABS.filter(t => !t.adminOnly || isAdmin);
 
@@ -71,7 +95,7 @@ function FinancesPageInner() {
         </div>
       </div>
 
-      {tab === "payment" && <PaymentEntryTab />}
+      {tab === "payment" && <PaymentEntryTab prefillLead={prefillLead} />}
       {tab === "expense" && <ExpenseEntryTab />}
       {tab === "summary" && <DailySummaryTab />}
       {tab === "reports" && <ReportsTab />}
