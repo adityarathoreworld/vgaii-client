@@ -30,7 +30,7 @@ const dotTone = (action: string): string => {
 export default function RecentActivityCard() {
   // 403 on STAFF role — fall back to a friendly empty state instead of
   // surfacing a permission error on the dashboard.
-  const { data, error, isLoading } = useSWR<Response>("/api/audit?limit=5", {
+  const { data, error, isLoading } = useSWR<Response>("/api/audit?limit=2", {
     shouldRetryOnError: false,
   });
 

@@ -8,13 +8,41 @@ type Action = {
   href: string;
   label: string;
   icon: LucideIcon;
+  // Tailwind classes for the icon's circular swatch — keeps each tile
+  // visually distinct without painting the whole button.
+  iconClass: string;
+  hoverClass: string;
 };
 
 const ACTIONS: Action[] = [
-  { href: "/leads?add=1", label: "Add Lead", icon: UserPlus },
-  { href: "/patients?add=1", label: "Add Patient", icon: Users },
-  { href: "/appointments?add=1", label: "New Appointment", icon: CalendarPlus },
-  { href: "/reports", label: "View Reports", icon: BarChart3 },
+  {
+    href: "/leads?add=1",
+    label: "Add Lead",
+    icon: UserPlus,
+    iconClass: "bg-indigo-100 text-indigo-600",
+    hoverClass: "hover:border-indigo-200 hover:bg-indigo-50",
+  },
+  {
+    href: "/patients?add=1",
+    label: "Add Patient",
+    icon: Users,
+    iconClass: "bg-emerald-100 text-emerald-600",
+    hoverClass: "hover:border-emerald-200 hover:bg-emerald-50",
+  },
+  {
+    href: "/appointments?add=1",
+    label: "New Appointment",
+    icon: CalendarPlus,
+    iconClass: "bg-sky-100 text-sky-600",
+    hoverClass: "hover:border-sky-200 hover:bg-sky-50",
+  },
+  {
+    href: "/reports",
+    label: "View Reports",
+    icon: BarChart3,
+    iconClass: "bg-amber-100 text-amber-600",
+    hoverClass: "hover:border-amber-200 hover:bg-amber-50",
+  },
 ];
 
 export default function QuickActionsCard() {
@@ -28,9 +56,13 @@ export default function QuickActionsCard() {
             <Link
               key={a.href}
               href={a.href}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              className={`inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition ${a.hoverClass}`}
             >
-              <Icon size={14} className="text-slate-500" />
+              <span
+                className={`inline-flex h-6 w-6 items-center justify-center rounded-full ${a.iconClass}`}
+              >
+                <Icon size={12} />
+              </span>
               <span>{a.label}</span>
             </Link>
           );
