@@ -1,13 +1,13 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { CalendarDays, History, CalendarRange, Eye, Pencil } from "lucide-react";
 import StatusPill from "@/components/StatusPill";
 import RoleGuard from "@/components/RoleGuard";
-import AttachmentsSection from "@/components/AttachmentsSection";
 import AddAppointmentModal from "@/components/AddAppointmentModal";
+import EditAppointmentModal from "@/components/EditAppointmentModal";
 
 type Appointment = {
   id: string;
@@ -208,22 +208,12 @@ function AppointmentsPageInner() {
     () => searchParams.get("add") === "1",
   );
 
-  // Mark visited / Edit form (shared)
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDate, setEditDate] = useState("");
-  const [editStatus, setEditStatus] = useState("scheduled");
-  const [editDiagnosis, setEditDiagnosis] = useState("");
-  const [editMedicines, setEditMedicines] = useState("");
-  const [editNotes, setEditNotes] = useState("");
-  // Vitals captured at completion. All optional — stored as strings here
-  // so a blank field saves as null on the server.
-  const [editWeight, setEditWeight] = useState("");
-  const [editSugar, setEditSugar] = useState("");
-  const [editBpSys, setEditBpSys] = useState("");
-  const [editBpDia, setEditBpDia] = useState("");
-
-  // Per-row expand/collapse (only one open at a time keeps the page scannable)
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Modal-driven edit/mark-visited. The page no longer owns the form
+  // state — EditAppointmentModal seeds itself from the selected row.
+  const [editTarget, setEditTarget] = useState<{
+    appointment: Appointment;
+    mode: "edit" | "visit";
+  } | null>(null);
 
   // tabs + filters
   const [tab, setTab] = useState<Tab>("upcoming");
@@ -307,46 +297,6 @@ function AppointmentsPageInner() {
     } finally {
       setBusyId(null);
     }
-  };
-
-  const startEdit = (a: Appointment, presetCompleted = false) => {
-    setEditingId(a.id);
-    setExpandedId(a.id);
-    setEditDate(a.date ? new Date(a.date).toISOString().slice(0, 16) : "");
-    setEditStatus(presetCompleted ? "completed" : a.status ?? "scheduled");
-    setEditDiagnosis(a.diagnosis ?? "");
-    setEditMedicines((a.medicines ?? []).join("\n"));
-    setEditNotes(a.notes ?? "");
-    setEditWeight(a.weightKg != null ? String(a.weightKg) : "");
-    setEditSugar(a.sugarMgDl != null ? String(a.sugarMgDl) : "");
-    setEditBpSys(a.bpSystolic != null ? String(a.bpSystolic) : "");
-    setEditBpDia(a.bpDiastolic != null ? String(a.bpDiastolic) : "");
-  };
-  const cancelEdit = () => setEditingId(null);
-
-  // Empty strings become explicit nulls so the user can clear a previously
-  // recorded vital. Non-numeric input is ignored (undefined → no update).
-  const vitalOrNull = (raw: string): number | null | undefined => {
-    if (raw.trim() === "") return null;
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : undefined;
-  };
-
-  const saveEdit = async (id: string) => {
-    await patch(id, {
-      date: editDate ? new Date(editDate).toISOString() : undefined,
-      status: editStatus,
-      diagnosis: editDiagnosis,
-      notes: editNotes,
-      medicines: editMedicines
-        ? editMedicines.split("\n").map(s => s.trim()).filter(Boolean)
-        : [],
-      weightKg: vitalOrNull(editWeight),
-      sugarMgDl: vitalOrNull(editSugar),
-      bpSystolic: vitalOrNull(editBpSys),
-      bpDiastolic: vitalOrNull(editBpDia),
-    });
-    setEditingId(null);
   };
 
   const markNoShow = (id: string) => patch(id, { status: "no_show" });
@@ -442,6 +392,19 @@ function AppointmentsPageInner() {
         }}
       />
 
+      {editTarget && (
+        <EditAppointmentModal
+          appointment={editTarget.appointment}
+          mode={editTarget.mode}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => {
+            setEditTarget(null);
+            refreshTable();
+            refreshNow();
+          }}
+        />
+      )}
+
       {(active || next) && (
         <div
           className={`grid gap-4 ${
@@ -454,7 +417,9 @@ function AppointmentsPageInner() {
               label="Active appointment"
               appointment={active}
               busy={busyId === active.id}
-              onMarkVisited={() => startEdit(active, true)}
+              onMarkVisited={() =>
+                setEditTarget({ appointment: active, mode: "visit" })
+              }
               onNoShow={() => markNoShow(active.id)}
             />
           )}
@@ -478,8 +443,6 @@ function AppointmentsPageInner() {
                 type="button"
                 onClick={() => {
                   setTab(key);
-                  setExpandedId(null);
-                  setEditingId(null);
                 }}
                 className={`flex flex-1 items-center justify-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold transition ${
                   isActive
@@ -588,284 +551,110 @@ function AppointmentsPageInner() {
               </thead>
               <tbody>
                 {pagedVisible.map(a => {
-                  const isEditing = editingId === a.id;
-                  const isExpanded = expandedId === a.id || isEditing;
                   const isScheduled = !a.status || a.status === "scheduled";
-                  const hasDetails =
-                    !!a.diagnosis ||
-                    (!!a.medicines && a.medicines.length > 0) ||
-                    !!a.notes ||
-                    a.weightKg != null ||
-                    a.sugarMgDl != null ||
-                    a.bpSystolic != null ||
-                    a.bpDiastolic != null;
                   const dt = new Date(a.date);
                   return (
-                    <Fragment key={a.id}>
-                      <tr
-                        className="border-t border-slate-200 hover:bg-slate-50"
-                      >
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <span
-                              className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${avatarTone(a.name)}`}
-                            >
-                              {initial(a.name)}
-                            </span>
-                            <div className="min-w-0">
-                              <p className="truncate font-semibold text-slate-900">
-                                {a.name || "Unnamed"}
-                              </p>
-                              <p className="truncate text-xs text-slate-500">
-                                {[a.phone, a.email].filter(Boolean).join(" · ") || "—"}
-                              </p>
-                            </div>
+                    <tr
+                      key={a.id}
+                      className="border-t border-slate-200 hover:bg-slate-50"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${avatarTone(a.name)}`}
+                          >
+                            {initial(a.name)}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold text-slate-900">
+                              {a.name || "Unnamed"}
+                            </p>
+                            <p className="truncate text-xs text-slate-500">
+                              {[a.phone, a.email].filter(Boolean).join(" · ") || "—"}
+                            </p>
                           </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-col items-start gap-1">
-                            <StatusPill status={a.status ?? "scheduled"} />
-                            <span className="text-xs text-slate-500">
-                              {dt.toLocaleString(undefined, {
-                                month: "numeric",
-                                day: "numeric",
-                                year: "numeric",
-                              })}
-                              {", "}
-                              {dt.toLocaleString(undefined, {
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">
-                          {a.source || "—"}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {isScheduled && !isEditing && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => startEdit(a, true)}
-                                  disabled={busyId === a.id}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
-                                >
-                                  ✓ Mark visited
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => markNoShow(a.id)}
-                                  disabled={busyId === a.id}
-                                  className="rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
-                                >
-                                  No show
-                                </button>
-                              </>
-                            )}
-                            {!isScheduled && a.status === "completed" && (
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col items-start gap-1">
+                          <StatusPill status={a.status ?? "scheduled"} />
+                          <span className="text-xs text-slate-500">
+                            {dt.toLocaleString(undefined, {
+                              month: "numeric",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                            {", "}
+                            {dt.toLocaleString(undefined, {
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                          <VitalsBadges appointment={a} />
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">
+                        {a.source || "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {isScheduled && (
+                            <>
                               <button
                                 type="button"
-                                onClick={() => reopen(a.id)}
+                                onClick={() =>
+                                  setEditTarget({ appointment: a, mode: "visit" })
+                                }
                                 disabled={busyId === a.id}
-                                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                                className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
                               >
-                                Reopen
+                                ✓ Mark visited
                               </button>
-                            )}
+                              <button
+                                type="button"
+                                onClick={() => markNoShow(a.id)}
+                                disabled={busyId === a.id}
+                                className="rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
+                              >
+                                No show
+                              </button>
+                            </>
+                          )}
+                          {!isScheduled && a.status === "completed" && (
                             <button
                               type="button"
-                              onClick={() =>
-                                setExpandedId(prev =>
-                                  prev === a.id ? null : a.id,
-                                )
-                              }
-                              className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-indigo-600"
-                              aria-label={`View ${a.name ?? "appointment"}`}
-                              title={isExpanded ? "Hide" : "View"}
+                              onClick={() => reopen(a.id)}
+                              disabled={busyId === a.id}
+                              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
                             >
-                              <Eye size={14} />
+                              Reopen
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => (isEditing ? cancelEdit() : startEdit(a))}
-                              className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-indigo-600"
-                              aria-label={`Edit ${a.name ?? "appointment"}`}
-                              title={isEditing ? "Cancel edit" : "Edit"}
-                            >
-                              <Pencil size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-
-                      {isExpanded && (
-                        <tr className="border-t border-slate-200 bg-slate-50">
-                          <td colSpan={4} className="px-4 py-3">
-                            {isEditing ? (
-                              <div className="space-y-3">
-                                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                                  <label className="block">
-                                    <span className="text-xs font-medium uppercase tracking-wider text-slate-500">
-                                      Date &amp; time
-                                    </span>
-                                    <input
-                                      type="datetime-local"
-                                      value={editDate}
-                                      onChange={e => setEditDate(e.target.value)}
-                                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                                    />
-                                  </label>
-                                  <label className="block">
-                                    <span className="text-xs font-medium uppercase tracking-wider text-slate-500">
-                                      Status
-                                    </span>
-                                    <select
-                                      value={editStatus}
-                                      onChange={e => setEditStatus(e.target.value)}
-                                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                                    >
-                                      <option value="scheduled">Scheduled</option>
-                                      <option value="completed">Visited</option>
-                                      <option value="no_show">No show</option>
-                                      <option value="cancelled">Cancelled</option>
-                                    </select>
-                                  </label>
-                                </div>
-                                <label className="block">
-                                  <span className="text-xs font-medium uppercase tracking-wider text-slate-500">
-                                    Diagnosis
-                                  </span>
-                                  <textarea
-                                    value={editDiagnosis}
-                                    onChange={e => setEditDiagnosis(e.target.value)}
-                                    rows={2}
-                                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                                    placeholder="What was diagnosed during this visit"
-                                  />
-                                </label>
-                                <label className="block">
-                                  <span className="text-xs font-medium uppercase tracking-wider text-slate-500">
-                                    Medicines (one per line)
-                                  </span>
-                                  <textarea
-                                    value={editMedicines}
-                                    onChange={e => setEditMedicines(e.target.value)}
-                                    rows={3}
-                                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                                    placeholder={
-                                      "Amoxicillin 500mg — 3 times a day for 5 days\nIbuprofen 400mg — as needed"
-                                    }
-                                  />
-                                </label>
-                                <label className="block">
-                                  <span className="text-xs font-medium uppercase tracking-wider text-slate-500">
-                                    Notes
-                                  </span>
-                                  <textarea
-                                    value={editNotes}
-                                    onChange={e => setEditNotes(e.target.value)}
-                                    rows={2}
-                                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                                  />
-                                </label>
-                                <div>
-                                  <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
-                                    Vitals (optional)
-                                  </p>
-                                  <div className="mt-1 grid grid-cols-2 gap-3 md:grid-cols-4">
-                                    <VitalInput
-                                      label="Weight (kg)"
-                                      value={editWeight}
-                                      onChange={setEditWeight}
-                                    />
-                                    <VitalInput
-                                      label="Sugar (mg/dL)"
-                                      value={editSugar}
-                                      onChange={setEditSugar}
-                                    />
-                                    <VitalInput
-                                      label="BP Systolic"
-                                      value={editBpSys}
-                                      onChange={setEditBpSys}
-                                      placeholder="120"
-                                    />
-                                    <VitalInput
-                                      label="BP Diastolic"
-                                      value={editBpDia}
-                                      onChange={setEditBpDia}
-                                      placeholder="80"
-                                    />
-                                  </div>
-                                </div>
-                                <AttachmentsSection appointmentId={a.id} canEdit />
-                                <div className="flex justify-end gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={cancelEdit}
-                                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                                  >
-                                    Cancel
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => saveEdit(a.id)}
-                                    disabled={busyId === a.id}
-                                    className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
-                                  >
-                                    Save
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <>
-                                {hasDetails ? (
-                                  <div className="space-y-2 text-sm">
-                                    {a.diagnosis && (
-                                      <div>
-                                        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                                          Diagnosis
-                                        </p>
-                                        <p className="whitespace-pre-line text-slate-700">
-                                          {a.diagnosis}
-                                        </p>
-                                      </div>
-                                    )}
-                                    {a.medicines && a.medicines.length > 0 && (
-                                      <div>
-                                        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                                          Medicines
-                                        </p>
-                                        <ul className="mt-1 list-disc pl-5 text-slate-700">
-                                          {a.medicines.map((m, i) => (
-                                            <li key={i}>{m}</li>
-                                          ))}
-                                        </ul>
-                                      </div>
-                                    )}
-                                    {a.notes && (
-                                      <p className="text-sm text-slate-600">
-                                        {a.notes}
-                                      </p>
-                                    )}
-                                    <VitalsBadges appointment={a} />
-                                  </div>
-                                ) : (
-                                  <p className="text-xs italic text-slate-400">
-                                    No diagnosis, medicines, or notes recorded yet.
-                                  </p>
-                                )}
-                                <AttachmentsSection
-                                  appointmentId={a.id}
-                                  canEdit={false}
-                                />
-                              </>
-                            )}
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditTarget({ appointment: a, mode: "edit" })
+                            }
+                            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-indigo-600"
+                            aria-label={`View ${a.name ?? "appointment"}`}
+                            title="View"
+                          >
+                            <Eye size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditTarget({ appointment: a, mode: "edit" })
+                            }
+                            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-indigo-600"
+                            aria-label={`Edit ${a.name ?? "appointment"}`}
+                            title="Edit"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
                   );
                 })}
               </tbody>
@@ -919,33 +708,6 @@ function AppointmentsPageInner() {
       </div>
       )}
     </div>
-  );
-}
-
-function VitalInput({
-  label,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}) {
-  return (
-    <label className="block">
-      <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
-        {label}
-      </span>
-      <input
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        inputMode="decimal"
-        placeholder={placeholder}
-        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-      />
-    </label>
   );
 }
 
