@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import { rupeesToPaise, paiseToRupees, formatRupees } from "@/lib/currency";
 
 type Preset = {
@@ -33,6 +33,30 @@ export default function PresetChargesTab() {
   const [newAmount, setNewAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const [seeding, setSeeding] = useState(false);
+  const seedDefaults = async () => {
+    setSeeding(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/preset-charges/seed-defaults", {
+        method: "POST",
+        headers: authHeaders(),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setError(
+          typeof body?.error === "string"
+            ? body.error
+            : "Couldn't seed starter charges",
+        );
+        return;
+      }
+      mutate();
+    } finally {
+      setSeeding(false);
+    }
+  };
 
   const addCharge = async () => {
     setError(null);
@@ -141,10 +165,25 @@ export default function PresetChargesTab() {
         {isLoading ? (
           <p className="px-4 py-3 text-sm text-slate-500">Loading…</p>
         ) : charges.length === 0 ? (
-          <p className="px-4 py-3 text-sm text-slate-500">
-            No preset charges yet. Add a few common services to make payment
-            entry one-tap.
-          </p>
+          <div className="flex flex-col items-start gap-3 px-4 py-4 text-sm">
+            <p className="text-slate-500">
+              No preset charges yet. Add a few common services to make
+              payment entry one-tap.
+            </p>
+            <button
+              type="button"
+              onClick={seedDefaults}
+              disabled={seeding}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
+            >
+              <Sparkles size={12} />
+              {seeding ? "Adding starter charges…" : "Add starter charges"}
+            </button>
+            <p className="text-xs text-slate-400">
+              Adds Consultation, Follow-up, Injection, Dressing, Dental
+              Cleaning, and X-Ray. Edit prices anytime.
+            </p>
+          </div>
         ) : (
           <ul className="divide-y divide-slate-200">
             {charges.map(c => (

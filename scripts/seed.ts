@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { canonicalPhone } from "../src/lib/phone";
+import { DEFAULT_PRESET_CHARGES } from "../src/lib/payment-defaults";
 import {
   password,
   clients as seedClients,
@@ -189,6 +190,25 @@ async function main() {
         submittedAt: f.submittedAt,
         status: f.status,
       },
+    });
+  }
+
+  // 6. Default preset charges — added to every seeded client (idempotent
+  // by title within client scope). Skipped if the client already has any
+  // presets, since manual edits during testing shouldn't be wiped.
+  for (const c of seedClients) {
+    const existing = await prisma.presetCharge.count({
+      where: { clientId: c.id },
+    });
+    if (existing > 0) continue;
+    await prisma.presetCharge.createMany({
+      data: DEFAULT_PRESET_CHARGES.map((p, idx) => ({
+        clientId: c.id,
+        title: p.title,
+        amount: p.amount,
+        active: true,
+        sortOrder: idx,
+      })),
     });
   }
 
