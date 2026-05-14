@@ -44,7 +44,14 @@ export async function GET(req: Request) {
     }
     if (entityId) where.entityId = entityId;
     if (action) where.action = action;
-    if (actorType) {
+
+    // CLIENT_ADMIN sees only actions taken by users (admin + their staff).
+    // Webhook / public-form / system entries belong on the platform-admin
+    // view, not the client-facing activity log. Server-side enforcement so
+    // a hand-crafted query param can't widen the scope.
+    if (user.role === "CLIENT_ADMIN") {
+      where.actorType = "user";
+    } else if (actorType) {
       where.actorType =
         actorType as "user" | "webhook" | "public" | "system";
     }

@@ -46,13 +46,11 @@ function ActivityPageInner() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  const [actorType, setActorType] = useState<string>("");
   const [entityType, setEntityType] = useState<string>("");
   const [actionFilter, setActionFilter] = useState<string>("");
 
   const buildUrl = (cursor?: string | null) => {
     const url = new URL("/api/audit", window.location.origin);
-    if (actorType) url.searchParams.set("actorType", actorType);
     if (entityType) url.searchParams.set("entityType", entityType);
     if (actionFilter) url.searchParams.set("action", actionFilter);
     if (cursor) url.searchParams.set("cursor", cursor);
@@ -71,7 +69,7 @@ function ActivityPageInner() {
       })
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [actorType, entityType, actionFilter]);
+  }, [entityType, actionFilter]);
 
   const loadMore = () => {
     if (!nextCursor) return;
@@ -85,9 +83,8 @@ function ActivityPageInner() {
       .finally(() => setLoadingMore(false));
   };
 
-  const filtersActive = !!actorType || !!entityType || !!actionFilter;
+  const filtersActive = !!entityType || !!actionFilter;
   const clear = () => {
-    setActorType("");
     setEntityType("");
     setActionFilter("");
   };
@@ -117,29 +114,13 @@ function ActivityPageInner() {
       <header>
         <h1 className="text-lg font-bold text-slate-900">Activity log</h1>
         <p className="text-sm text-slate-500">
-          Append-only record of every meaningful change in your account —
-          patient edits, status changes, webhook events, settings updates.
+          Append-only record of every action taken by you and your staff —
+          patient edits, status changes, settings updates.
         </p>
       </header>
 
       <div className="rounded-lg border border-slate-200 bg-white px-4 py-2.5">
         <div className="flex flex-wrap items-end gap-4">
-          <label className="block">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Actor
-            </span>
-            <select
-              value={actorType}
-              onChange={e => setActorType(e.target.value)}
-              className="mt-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            >
-              <option value="">All actors</option>
-              <option value="user">Users</option>
-              <option value="webhook">Webhooks</option>
-              <option value="public">Public forms</option>
-              <option value="system">System</option>
-            </select>
-          </label>
           <label className="block">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Entity
