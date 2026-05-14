@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ArrowLeft, Calendar, Globe, Mail, MapPin, Phone } from "lucide-react";
 import StatusPill from "@/components/StatusPill";
 import RoleGuard from "@/components/RoleGuard";
 import BookingEmbed from "@/components/BookingEmbed";
@@ -11,6 +12,8 @@ import {
   LEAD_TRANSITIONS,
   type LeadStatus,
 } from "@/lib/constants";
+
+type DetailTab = "overview" | "appointments" | "medical-history";
 
 type Lead = {
   id: string;
@@ -127,6 +130,9 @@ function PatientDetailPageInner({
   // Cal.com scheduling
   const [bookingUrl, setBookingUrl] = useState<string | null>(null);
   const [bookingOpen, setBookingOpen] = useState(false);
+
+  // Detail tabs (Overview / Appointments / Medical History).
+  const [tab, setTab] = useState<DetailTab>("overview");
 
   const load = () =>
     fetch(`/api/patients/${id}`, { headers: authHeaders() })
@@ -316,38 +322,76 @@ function PatientDetailPageInner({
     .filter(Boolean)
     .join(" · ");
 
+  const apptCardProps = (a: Appointment) => ({
+    appointment: a,
+    isEditing: editingId === a.id,
+    isExpanded: expandedApptId === a.id || editingId === a.id,
+    onToggleExpanded: () => toggleExpanded(a.id),
+    saving: savingId === a.id,
+    busy: busyApptId === a.id,
+    editState: {
+      editDate,
+      editStatus,
+      editDiagnosis,
+      editMedicines,
+      editNotes,
+      setEditDate,
+      setEditStatus,
+      setEditDiagnosis,
+      setEditMedicines,
+      setEditNotes,
+    },
+    onMarkVisited: () => startMarkVisited(a),
+    onNoShow: () => markNoShow(a.id),
+    onEdit: () => startEdit(a),
+    onCancelEdit: cancelEdit,
+    onSaveEdit: () => saveEdit(a.id),
+    onDelete: () => removeAppt(a.id),
+  });
+
+  const TAB_DEFS: Array<{ key: DetailTab; label: string }> = [
+    { key: "overview", label: "Overview" },
+    { key: "appointments", label: "Appointments" },
+    { key: "medical-history", label: "Medical History" },
+  ];
+
   return (
     <div className="space-y-3">
       <Link
         href="/patients"
-        className="text-sm text-indigo-600 hover:underline"
+        className="inline-flex items-center gap-1 text-sm text-indigo-600 hover:underline"
       >
-        ← Back to patients
+        <ArrowLeft size={14} />
+        Back to patients
       </Link>
 
       {/* HEADER: identity + primary CTA */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white px-4 py-3">
         <div className="flex min-w-0 items-center gap-4">
           <div
-            className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-lg font-bold text-white ${avatarBg}`}
+            className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-xl font-bold text-white ${avatarBg}`}
           >
             {initials || "?"}
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="truncate text-lg font-bold text-slate-900">
+              <h1 className="truncate text-xl font-bold text-slate-900">
                 {lead.name}
               </h1>
-              <StatusPill status={status} />
-              {inactive ? (
-                <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-slate-500">
+              <span
+                className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700"
+              >
+                {status === "visited" ? "Visited" : status.replace(/_/g, " ")}
+              </span>
+              <span
+                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                   inactive
-                </span>
-              ) : (
-                <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-emerald-700">
-                  active
-                </span>
-              )}
+                    ? "bg-slate-100 text-slate-500"
+                    : "bg-emerald-100 text-emerald-700"
+                }`}
+              >
+                {inactive ? "Inactive" : "Active"}
+              </span>
             </div>
             <p className="text-sm text-slate-600">{meta || "—"}</p>
           </div>
@@ -361,209 +405,232 @@ function PatientDetailPageInner({
         </button>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        {/* LEFT COLUMN — patient context */}
-        <aside className="space-y-3 lg:col-span-1">
-          <div className="rounded-lg border border-slate-200 bg-white px-4 py-2.5">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Contact
-            </p>
-            <dl className="mt-3 space-y-2 text-sm">
-              <ContactRow
-                icon="📞"
-                value={lead.phone}
-                href={`tel:${lead.phone}`}
-              />
-              {lead.email && (
-                <ContactRow
-                  icon="✉"
-                  value={lead.email}
-                  href={`mailto:${lead.email}`}
-                />
-              )}
-              {lead.area && <ContactRow icon="📍" value={lead.area} />}
-              {lead.source && (
-                <ContactRow
-                  icon="📥"
-                  value={lead.source}
-                  muted
-                />
-              )}
-            </dl>
-            <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 text-center">
-              <Stat label="Visits" value={completedCount} />
-              <Stat
-                label="Last visit"
-                value={
-                  lastVisit
-                    ? new Date(lastVisit).toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                      })
-                    : "—"
-                }
-              />
-              <Stat
-                label="Outcome"
-                value={
-                  typeof lead.outcomeRating === "number"
-                    ? `⭐ ${lead.outcomeRating}/5`
-                    : "—"
-                }
-              />
-            </div>
-            {lead.createdAt && (
-              <p className="mt-3 text-[11px] text-slate-400">
-                Captured {new Date(lead.createdAt).toLocaleDateString()}
-              </p>
-            )}
-          </div>
-
-          <div className="rounded-lg border border-slate-200 bg-white px-4 py-2.5">
-            <div className="flex items-center justify-between">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                Patient notes
-              </p>
-              {dirtyNotes && (
-                <span className="text-[11px] text-amber-600">unsaved</span>
-              )}
-            </div>
-            <textarea
-              value={notesDraft}
-              onChange={e => setNotesDraft(e.target.value)}
-              rows={6}
-              className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-              placeholder="Allergies, chronic conditions, preferences, follow-up reminders…"
-            />
-            <div className="mt-2 flex justify-end">
+      {/* TAB NAV */}
+      <div className="rounded-lg border border-slate-200 bg-white">
+        <div className="flex border-b border-slate-200">
+          {TAB_DEFS.map(({ key, label }) => {
+            const isActive = tab === key;
+            return (
               <button
+                key={key}
                 type="button"
-                onClick={saveNotes}
-                disabled={!dirtyNotes || savingNotes}
-                className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+                onClick={() => setTab(key)}
+                className={`flex-1 border-b-2 px-4 py-3 text-sm font-semibold transition ${
+                  isActive
+                    ? "border-indigo-600 text-indigo-700"
+                    : "border-transparent text-slate-500 hover:text-slate-700"
+                }`}
               >
-                {savingNotes ? "Saving…" : "Save notes"}
+                {label}
               </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {tab === "overview" && (
+        <div className="grid gap-3 lg:grid-cols-3">
+          {/* LEFT COLUMN — Contact + Notes */}
+          <div className="space-y-3 lg:col-span-1">
+            <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+              <p className="text-base font-semibold text-slate-900">Contact</p>
+              <dl className="mt-3 space-y-2 text-sm">
+                <ContactRow
+                  icon={<Phone size={14} />}
+                  value={lead.phone}
+                  href={`tel:${lead.phone}`}
+                />
+                {lead.email && (
+                  <ContactRow
+                    icon={<Mail size={14} />}
+                    value={lead.email}
+                    href={`mailto:${lead.email}`}
+                  />
+                )}
+                {lead.area && (
+                  <ContactRow icon={<MapPin size={14} />} value={lead.area} />
+                )}
+                {lead.source && (
+                  <ContactRow
+                    icon={<Globe size={14} />}
+                    value={lead.source}
+                    muted
+                  />
+                )}
+              </dl>
+              <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 text-center">
+                <Stat label="Visits" value={completedCount} />
+                <Stat
+                  label="Last visit"
+                  value={
+                    lastVisit
+                      ? new Date(lastVisit).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                        })
+                      : "—"
+                  }
+                />
+                <Stat
+                  label="Outcome"
+                  value={
+                    typeof lead.outcomeRating === "number"
+                      ? `⭐ ${lead.outcomeRating}/5`
+                      : "—"
+                  }
+                />
+              </div>
+              {lead.createdAt && (
+                <p className="mt-3 text-[11px] text-slate-400">
+                  Captured {new Date(lead.createdAt).toLocaleDateString()}
+                </p>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+              <div className="flex items-center justify-between">
+                <p className="text-base font-semibold text-slate-900">
+                  Patient notes
+                </p>
+                {dirtyNotes && (
+                  <span className="text-[11px] text-amber-600">unsaved</span>
+                )}
+              </div>
+              <textarea
+                value={notesDraft}
+                onChange={e => setNotesDraft(e.target.value)}
+                rows={6}
+                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                placeholder="Allergies, chronic conditions, preferences, follow-up reminders…"
+              />
+              <div className="mt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={saveNotes}
+                  disabled={!dirtyNotes || savingNotes}
+                  className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+                >
+                  {savingNotes ? "Saving…" : "Save notes"}
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Funnel status
-            </p>
-            <p className="mt-2 text-sm text-slate-700">
-              Currently <StatusPill status={status} />
-            </p>
-            {allowed.length === 0 ? (
-              <p className="mt-2 text-xs text-slate-500">
-                Terminal state — no further status changes.
+          {/* RIGHT COLUMN — Upcoming appointment + Funnel */}
+          <div className="space-y-3 lg:col-span-2">
+            <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+              <p className="text-base font-semibold text-slate-900">
+                Upcoming appointment
               </p>
-            ) : (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {allowed.map(next => (
-                  <button
-                    key={next}
-                    type="button"
-                    onClick={() => setStatus(next)}
-                    disabled={busy}
-                    className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-white disabled:opacity-60"
-                  >
-                    {next.replace(/_/g, " ")}
-                  </button>
-                ))}
-              </div>
-            )}
-            {transitionError && (
-              <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                {transitionError}
-              </p>
-            )}
-          </div>
-        </aside>
+              {upcoming.length === 0 ? (
+                <div className="mt-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">
+                  No upcoming appointments. Click{" "}
+                  <strong>Schedule appointment</strong> to book one.
+                </div>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  {upcoming.map(a => (
+                    <UpcomingAppointmentCard
+                      key={a.id}
+                      {...apptCardProps(a)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
 
-        {/* RIGHT COLUMN — clinical work */}
-        <div className="space-y-3 lg:col-span-2">
-          {upcoming.length > 0 && (
-            <section>
-              <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                Upcoming ({upcoming.length})
-              </h2>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                Funnel status
+              </p>
+              <p className="mt-2 inline-flex items-center gap-2 text-sm text-slate-700">
+                Currently <StatusPill status={status} />
+              </p>
+              {allowed.length === 0 ? (
+                <p className="mt-2 text-xs text-slate-500">
+                  Terminal state — no further status changes.
+                </p>
+              ) : (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {allowed.map(next => (
+                    <button
+                      key={next}
+                      type="button"
+                      onClick={() => setStatus(next)}
+                      disabled={busy}
+                      className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-white disabled:opacity-60"
+                    >
+                      {next.replace(/_/g, " ")}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {transitionError && (
+                <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  {transitionError}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === "appointments" && (
+        <div className="space-y-3">
+          <section>
+            <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              Upcoming ({upcoming.length})
+            </h2>
+            {upcoming.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">
+                No upcoming appointments.
+              </div>
+            ) : (
               <div className="space-y-3">
                 {upcoming.map(a => (
-                  <AppointmentCard
-                    key={a.id}
-                    appointment={a}
-                    isEditing={editingId === a.id}
-                    isExpanded={expandedApptId === a.id || editingId === a.id}
-                    onToggleExpanded={() => toggleExpanded(a.id)}
-                    saving={savingId === a.id}
-                    busy={busyApptId === a.id}
-                    editState={{
-                      editDate,
-                      editStatus,
-                      editDiagnosis,
-                      editMedicines,
-                      editNotes,
-                      setEditDate,
-                      setEditStatus,
-                      setEditDiagnosis,
-                      setEditMedicines,
-                      setEditNotes,
-                    }}
-                    onMarkVisited={() => startMarkVisited(a)}
-                    onNoShow={() => markNoShow(a.id)}
-                    onEdit={() => startEdit(a)}
-                    onCancelEdit={cancelEdit}
-                    onSaveEdit={() => saveEdit(a.id)}
-                    onDelete={() => removeAppt(a.id)}
-                  />
+                  <AppointmentCard key={a.id} {...apptCardProps(a)} />
                 ))}
               </div>
-            </section>
-          )}
+            )}
+          </section>
 
           <section>
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                Medical history ({past.length})
-              </h2>
-            </div>
+            <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              Past ({past.length})
+            </h2>
             {past.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-6 py-5 text-center text-sm text-slate-500">
+              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">
+                No past appointments yet.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {past.map(a => (
+                  <AppointmentCard key={a.id} {...apptCardProps(a)} />
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
+      {tab === "medical-history" && (
+        <div className="space-y-3">
+          <section>
+            <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              Medical history ({past.filter(a => a.status === "completed").length})
+            </h2>
+            {past.filter(a => a.status === "completed").length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">
                 No past visits yet. After the first appointment is completed,
                 its diagnosis and medicines will appear here.
               </div>
             ) : (
               <div className="space-y-3">
-                {past.map(a => (
-                  <AppointmentCard
-                    key={a.id}
-                    appointment={a}
-                    isEditing={editingId === a.id}
-                    isExpanded={expandedApptId === a.id || editingId === a.id}
-                    onToggleExpanded={() => toggleExpanded(a.id)}
-                    saving={savingId === a.id}
-                    busy={busyApptId === a.id}
-                    editState={{
-                      editDate,
-                      editStatus,
-                      editDiagnosis,
-                      editMedicines,
-                      editNotes,
-                      setEditDate,
-                      setEditStatus,
-                      setEditDiagnosis,
-                      setEditMedicines,
-                      setEditNotes,
-                    }}
-                    onMarkVisited={() => startMarkVisited(a)}
-                    onNoShow={() => markNoShow(a.id)}
-                    onEdit={() => startEdit(a)}
-                    onCancelEdit={cancelEdit}
-                    onSaveEdit={() => saveEdit(a.id)}
-                    onDelete={() => removeAppt(a.id)}
-                  />
-                ))}
+                {past
+                  .filter(a => a.status === "completed")
+                  .map(a => (
+                    <AppointmentCard key={a.id} {...apptCardProps(a)} />
+                  ))}
               </div>
             )}
           </section>
@@ -604,7 +671,7 @@ function PatientDetailPageInner({
             </section>
           )}
         </div>
-      </div>
+      )}
 
       {bookingOpen && (
         <div
@@ -713,7 +780,7 @@ function ContactRow({
   href,
   muted,
 }: {
-  icon: string;
+  icon: React.ReactNode;
   value: string;
   href?: string;
   muted?: boolean;
@@ -723,7 +790,9 @@ function ContactRow({
   );
   return (
     <div className="flex items-center gap-2">
-      <span className="w-5 text-base leading-none text-slate-400">{icon}</span>
+      <span className="inline-flex h-5 w-5 items-center justify-center text-slate-400">
+        {icon}
+      </span>
       {href ? (
         <a href={href} className="truncate hover:underline">
           {text}
@@ -731,6 +800,94 @@ function ContactRow({
       ) : (
         <span className="truncate">{text}</span>
       )}
+    </div>
+  );
+}
+
+// Compact card variant shown only on the Overview tab — emphasises the
+// date/time and the four core actions. Detailed appointment editing lives
+// on the Appointments tab via AppointmentCard.
+function UpcomingAppointmentCard({
+  appointment,
+  busy,
+  onMarkVisited,
+  onNoShow,
+  onEdit,
+  onDelete,
+}: {
+  appointment: Appointment;
+  isEditing: boolean;
+  isExpanded: boolean;
+  onToggleExpanded: () => void;
+  saving: boolean;
+  busy: boolean;
+  editState: AppointmentCardEditState;
+  onMarkVisited: () => void;
+  onNoShow: () => void;
+  onEdit: () => void;
+  onCancelEdit: () => void;
+  onSaveEdit: () => void;
+  onDelete: () => void;
+}) {
+  const a = appointment;
+  const dt = a.date ? new Date(a.date) : null;
+  const dateStr = dt
+    ? dt.toLocaleString(undefined, {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : "No date";
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 border-l-4 border-l-sky-500 bg-white px-4 py-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
+          <Calendar size={18} />
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-slate-900">
+            {dateStr}
+          </p>
+          <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <StatusPill status={a.status ?? "scheduled"} />
+            {a.source && <span>via {a.source}</span>}
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          onClick={onMarkVisited}
+          className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+        >
+          Mark visited
+        </button>
+        <button
+          type="button"
+          onClick={onNoShow}
+          disabled={busy}
+          className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
+        >
+          No show
+        </button>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={busy}
+          className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
+        >
+          Delete
+        </button>
+      </div>
     </div>
   );
 }
