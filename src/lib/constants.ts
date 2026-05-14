@@ -40,3 +40,26 @@ export const APPOINTMENT_STATUSES = [
 ] as const;
 
 export type AppointmentStatus = (typeof APPOINTMENT_STATUSES)[number];
+
+export const PAYMENT_METHODS = [
+  "cash",
+  "upi",
+  "card",
+  "mixed",
+  "pending",
+] as const;
+
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+export const EXPENSE_CATEGORIES = [
+  "electricity",
+  "rent",
+  "staff_salary",
+  "medicines",
+  "cleaning",
+  "internet",
+  "marketing",
+  "miscellaneous",
+] as const;
+
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];

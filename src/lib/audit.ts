@@ -12,7 +12,15 @@ const getIp = (req: Request): string | null => {
 
 type LogInput = {
   action: string;
-  entityType: "Lead" | "Appointment" | "Client" | "User" | "Feedback";
+  entityType:
+    | "Lead"
+    | "Appointment"
+    | "Client"
+    | "User"
+    | "Feedback"
+    | "Payment"
+    | "Expense"
+    | "PresetCharge";
   entityId?: string | null;
   entityLabel?: string;
   summary?: string;

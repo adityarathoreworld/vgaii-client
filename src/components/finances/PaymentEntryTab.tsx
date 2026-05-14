@@ -1,0 +1,500 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import useSWR from "swr";
+import { Banknote, CreditCard, Plus, Search, Smartphone, Trash2, UserPlus, Wallet, X } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { rupeesToPaise, formatRupees } from "@/lib/currency";
+import type { PaymentMethod } from "@/lib/constants";
+
+type Preset = {
+  id: string;
+  title: string;
+  amount: number;
+};
+
+type LeadHit = {
+  id: string;
+  name: string;
+  phone: string;
+};
+
+type PresetsResponse = { charges: Preset[] };
+type LeadsResponse = { leads: LeadHit[] };
+
+type LineItem = {
+  // Tracking id for keyed list manipulation; not sent to the server.
+  key: string;
+  presetChargeId?: string;
+  title: string;
+  amount: number; // paise
+};
+
+const authHeaders = () => ({
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${
+    typeof window !== "undefined" ? localStorage.getItem("token") : ""
+  }`,
+});
+
+const METHOD_DEFS: Array<{
+  key: PaymentMethod;
+  label: string;
+  icon: LucideIcon;
+  className: string;
+  activeClass: string;
+}> = [
+  {
+    key: "cash",
+    label: "Cash",
+    icon: Banknote,
+    className: "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50",
+    activeClass: "border-emerald-500 bg-emerald-600 text-white shadow-sm",
+  },
+  {
+    key: "upi",
+    label: "UPI",
+    icon: Smartphone,
+    className: "border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-50",
+    activeClass: "border-indigo-500 bg-indigo-600 text-white shadow-sm",
+  },
+  {
+    key: "card",
+    label: "Card",
+    icon: CreditCard,
+    className: "border-sky-200 bg-white text-sky-700 hover:bg-sky-50",
+    activeClass: "border-sky-500 bg-sky-600 text-white shadow-sm",
+  },
+  {
+    key: "mixed",
+    label: "Mixed",
+    icon: Wallet,
+    className: "border-violet-200 bg-white text-violet-700 hover:bg-violet-50",
+    activeClass: "border-violet-500 bg-violet-600 text-white shadow-sm",
+  },
+  {
+    key: "pending",
+    label: "Pending",
+    icon: Wallet,
+    className: "border-amber-200 bg-white text-amber-700 hover:bg-amber-50",
+    activeClass: "border-amber-500 bg-amber-500 text-white shadow-sm",
+  },
+];
+
+// Generate a per-line stable key without pulling in nanoid.
+const newKey = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+export default function PaymentEntryTab() {
+  // Patient picker — either link to an existing lead/patient, or record
+  // a walk-in by typing name + phone.
+  const [linkedLead, setLinkedLead] = useState<LeadHit | null>(null);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [walkInName, setWalkInName] = useState("");
+  const [walkInPhone, setWalkInPhone] = useState("");
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const { data: leadsData } = useSWR<LeadsResponse>(
+    !linkedLead && debouncedSearch.trim().length >= 2
+      ? `/api/leads?all=1&search=${encodeURIComponent(debouncedSearch.trim())}`
+      : null,
+  );
+  const leadHits = leadsData?.leads ?? [];
+
+  const { data: presetsData } = useSWR<PresetsResponse>("/api/preset-charges");
+  const presets = useMemo(() => presetsData?.charges ?? [], [presetsData]);
+
+  // Payment composition
+  const [items, setItems] = useState<LineItem[]>([]);
+  const [discountInput, setDiscountInput] = useState("");
+  const [method, setMethod] = useState<PaymentMethod>("cash");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+
+  // Custom one-off line input (for charges that don't have a preset)
+  const [customTitle, setCustomTitle] = useState("");
+  const [customAmount, setCustomAmount] = useState("");
+
+  const addPreset = (p: Preset) => {
+    setItems(prev => [
+      ...prev,
+      { key: newKey(), presetChargeId: p.id, title: p.title, amount: p.amount },
+    ]);
+  };
+
+  const addCustom = () => {
+    const rupees = Number(customAmount);
+    if (!customTitle.trim() || !Number.isFinite(rupees) || rupees < 0) return;
+    setItems(prev => [
+      ...prev,
+      {
+        key: newKey(),
+        title: customTitle.trim(),
+        amount: rupeesToPaise(rupees),
+      },
+    ]);
+    setCustomTitle("");
+    setCustomAmount("");
+  };
+
+  const removeItem = (key: string) =>
+    setItems(prev => prev.filter(i => i.key !== key));
+
+  const totalPaise = items.reduce((s, i) => s + i.amount, 0);
+  const discountPaise = (() => {
+    const n = Number(discountInput);
+    return Number.isFinite(n) && n > 0 ? rupeesToPaise(n) : 0;
+  })();
+  const finalPaise = Math.max(0, totalPaise - discountPaise);
+
+  const reset = () => {
+    setLinkedLead(null);
+    setSearch("");
+    setWalkInName("");
+    setWalkInPhone("");
+    setItems([]);
+    setDiscountInput("");
+    setMethod("cash");
+    setNotes("");
+  };
+
+  const save = async () => {
+    setError(null);
+    setSavedMsg(null);
+    if (items.length === 0) return setError("Add at least one charge");
+    if (!linkedLead && walkInName.trim().length < 1) {
+      return setError("Pick a patient or enter a walk-in name");
+    }
+
+    setBusy(true);
+    try {
+      const res = await fetch("/api/payments", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          leadId: linkedLead?.id,
+          patientName: linkedLead ? undefined : walkInName.trim() || undefined,
+          patientPhone: linkedLead ? undefined : walkInPhone.trim() || undefined,
+          items: items.map(i => ({
+            presetChargeId: i.presetChargeId,
+            title: i.title,
+            amount: i.amount,
+          })),
+          discount: discountPaise || undefined,
+          paymentMethod: method,
+          notes: notes.trim() || undefined,
+        }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(
+          typeof body?.error === "string" ? body.error : "Failed to save",
+        );
+        return;
+      }
+      setSavedMsg(`Saved ${formatRupees(finalPaise)} payment`);
+      reset();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-3">
+      {/* Left + middle column: patient + charges + payment method */}
+      <div className="space-y-3 lg:col-span-2">
+        {/* Patient picker */}
+        <section className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+          <h2 className="text-base font-semibold text-slate-900">Patient</h2>
+          {linkedLead ? (
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5">
+              <div>
+                <p className="font-medium text-slate-900">{linkedLead.name}</p>
+                <p className="text-xs text-slate-600">{linkedLead.phone}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLinkedLead(null)}
+                className="text-xs text-slate-500 hover:text-slate-700"
+              >
+                Change
+              </button>
+            </div>
+          ) : (
+            <div className="mt-3 space-y-3">
+              <div className="relative">
+                <Search
+                  size={14}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+                <input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search existing patient by name or phone…"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 pl-9 text-sm text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                />
+                {leadHits.length > 0 && (
+                  <ul className="absolute left-0 right-0 z-10 mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                    {leadHits.slice(0, 8).map(h => (
+                      <li key={h.id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLinkedLead(h);
+                            setSearch("");
+                          }}
+                          className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
+                        >
+                          <span className="font-medium text-slate-900">
+                            {h.name}
+                          </span>
+                          <span className="ml-2 text-xs text-slate-500">
+                            {h.phone}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <span className="flex-1 border-t border-slate-200" />
+                <span>or walk-in</span>
+                <span className="flex-1 border-t border-slate-200" />
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                <label className="block">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    Name
+                  </span>
+                  <input
+                    value={walkInName}
+                    onChange={e => setWalkInName(e.target.value)}
+                    placeholder="Walk-in name"
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    Phone (optional)
+                  </span>
+                  <input
+                    value={walkInPhone}
+                    onChange={e => setWalkInPhone(e.target.value)}
+                    inputMode="tel"
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Preset charges */}
+        <section className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-base font-semibold text-slate-900">Charges</h2>
+            <span className="text-xs text-slate-500">
+              Tap to add. Multiple charges combine into one payment.
+            </span>
+          </div>
+
+          {presets.length === 0 ? (
+            <p className="mt-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-500">
+              No preset charges configured yet. Add them on the{" "}
+              <strong>Preset Charges</strong> tab.
+            </p>
+          ) : (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {presets.map(p => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => addPreset(p)}
+                  className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3 py-1.5 text-sm font-medium text-indigo-700 transition hover:bg-indigo-50"
+                >
+                  <Plus size={12} />
+                  <span>{p.title}</span>
+                  <span className="text-xs text-slate-500">
+                    {formatRupees(p.amount)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Custom one-off line */}
+          <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-slate-100 pt-3">
+            <label className="block flex-1 min-w-[140px]">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                Custom line
+              </span>
+              <input
+                value={customTitle}
+                onChange={e => setCustomTitle(e.target.value)}
+                placeholder="e.g. Suture removal"
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+              />
+            </label>
+            <label className="block">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                ₹
+              </span>
+              <input
+                value={customAmount}
+                onChange={e => setCustomAmount(e.target.value)}
+                inputMode="numeric"
+                placeholder="0"
+                className="mt-1 w-28 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={addCustom}
+              disabled={!customTitle.trim() || !Number(customAmount)}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            >
+              <UserPlus size={12} />
+              Add line
+            </button>
+          </div>
+
+          {/* Selected lines */}
+          {items.length > 0 && (
+            <ul className="mt-3 divide-y divide-slate-100 rounded-lg border border-slate-200">
+              {items.map(i => (
+                <li
+                  key={i.key}
+                  className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
+                >
+                  <span className="truncate font-medium text-slate-900">
+                    {i.title}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-slate-700">{formatRupees(i.amount)}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeItem(i.key)}
+                      aria-label={`Remove ${i.title}`}
+                      className="rounded p-1 text-red-500 hover:bg-red-50"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* Payment method */}
+        <section className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+          <h2 className="text-base font-semibold text-slate-900">
+            Payment method
+          </h2>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+            {METHOD_DEFS.map(m => {
+              const Icon = m.icon;
+              const active = method === m.key;
+              return (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => setMethod(m.key)}
+                  className={`inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-3 text-sm font-semibold transition ${
+                    active ? m.activeClass : m.className
+                  }`}
+                >
+                  <Icon size={16} />
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      </div>
+
+      {/* Right column: totals + notes + save */}
+      <aside className="space-y-3 lg:col-span-1">
+        <section className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+          <h2 className="text-base font-semibold text-slate-900">Total</h2>
+
+          <div className="mt-3 space-y-2 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500">Subtotal</span>
+              <span className="font-medium text-slate-900">
+                {formatRupees(totalPaise)}
+              </span>
+            </div>
+            <label className="block">
+              <span className="text-xs text-slate-500">Discount (₹)</span>
+              <input
+                value={discountInput}
+                onChange={e => setDiscountInput(e.target.value)}
+                inputMode="numeric"
+                placeholder="0"
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+              />
+            </label>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3 text-base font-bold">
+            <span className="text-slate-700">Final</span>
+            <span className="text-indigo-700">{formatRupees(finalPaise)}</span>
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+          <label className="block">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              Notes
+            </span>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              rows={3}
+              placeholder="Anything to remember about this payment…"
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            />
+          </label>
+        </section>
+
+        {error && (
+          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            {error}
+          </p>
+        )}
+        {savedMsg && (
+          <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+            {savedMsg}
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy || items.length === 0}
+          className="w-full rounded-lg bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-60"
+        >
+          {busy ? "Saving…" : `Save payment · ${formatRupees(finalPaise)}`}
+        </button>
+        <button
+          type="button"
+          onClick={reset}
+          className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+        >
+          <Trash2 size={12} className="-mt-0.5 mr-1 inline" />
+          Clear form
+        </button>
+      </aside>
+    </div>
+  );
+}

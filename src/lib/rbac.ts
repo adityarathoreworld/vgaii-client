@@ -5,6 +5,7 @@ export const ASSIGNABLE_MODULES = [
   "patients",
   "appointments",
   "feedback",
+  "payments",
 ] as const;
 
 export type AssignableModule = (typeof ASSIGNABLE_MODULES)[number];

@@ -81,6 +81,31 @@ enum AuditEntityType {
   Client
   User
   Feedback
+  Payment
+  Expense
+  PresetCharge
+}
+
+// Currency is stored throughout in integer paise (₹ × 100) to avoid float
+// drift. The UI divides by 100 when displaying.
+
+enum PaymentMethod {
+  cash
+  upi
+  card
+  mixed
+  pending
+}
+
+enum ExpenseCategory {
+  electricity
+  rent
+  staff_salary
+  medicines
+  cleaning
+  internet
+  marketing
+  miscellaneous
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -109,11 +134,14 @@ model Client {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  users        User[]
-  leads        Lead[]
-  appointments Appointment[]
-  feedbacks    Feedback[]
-  attachments  Attachment[]
+  users         User[]
+  leads         Lead[]
+  appointments  Appointment[]
+  feedbacks     Feedback[]
+  attachments   Attachment[]
+  payments      Payment[]
+  presetCharges PresetCharge[]
+  expenses      Expense[]
   // AuditLog deliberately omitted — see AuditLog model for why we don't
   // enforce a FK on its clientId column.
 }
@@ -145,8 +173,10 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  leadsCreated Lead[]
-  attachments  Attachment[]
+  leadsCreated     Lead[]
+  attachments      Attachment[]
+  paymentsCollected Payment[]
+  expensesCreated  Expense[]
   // AuditLog deliberately omitted — see AuditLog model for why we don't
   // enforce a FK on its actorId column.
 }
@@ -184,6 +214,7 @@ model Lead {
 
   appointments Appointment[]
   feedbacks    Feedback[]
+  payments     Payment[]
 
   @@index([clientId, phoneNormalized])
   @@index([clientId, phone])
@@ -223,6 +254,7 @@ model Appointment {
   updatedAt   DateTime          @updatedAt
 
   attachments Attachment[]
+  payments    Payment[]
 
   @@index([clientId, date])
   @@index([leadId])
@@ -318,4 +350,87 @@ model AuditLog {
   @@index([clientId, createdAt(sort: Desc)])
   @@index([entityType, entityId, createdAt(sort: Desc)])
   @@index([action])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Payment diary (clinic payments + expenses + preset charge catalog)
+//
+// Money columns are integer paise (₹ × 100). PaymentItem snapshots the
+// preset's title at the time of the payment, so renaming/disabling the
+// preset doesn't rewrite history.
+// ─────────────────────────────────────────────────────────────────────
+
+model PresetCharge {
+  id        String        @id @default(cuid())
+  clientId  String
+  client    Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  title     String        @db.VarChar(120)
+  amount    Int
+  active    Boolean       @default(true)
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  items     PaymentItem[]
+
+  @@index([clientId, active, sortOrder])
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  clientId      String
+  client        Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  leadId        String?
+  lead          Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  appointmentId String?
+  appointment   Appointment?  @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  // Snapshot of patient contact info — walk-ins may not have a Lead.
+  patientName   String?       @db.VarChar(120)
+  patientPhone  String?       @db.VarChar(40)
+  // amount = sum(items.amount), discount applied to reach finalAmount.
+  amount        Int
+  discount      Int           @default(0)
+  finalAmount   Int
+  paymentMethod PaymentMethod
+  notes         String        @db.Text
+  collectedById String?
+  collectedBy   User?         @relation(fields: [collectedById], references: [id], onDelete: SetNull)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  items PaymentItem[]
+
+  @@index([clientId, createdAt(sort: Desc)])
+  @@index([leadId])
+  @@index([appointmentId])
+  @@index([paymentMethod])
+}
+
+model PaymentItem {
+  id             String        @id @default(cuid())
+  paymentId      String
+  payment        Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  presetChargeId String?
+  presetCharge   PresetCharge? @relation(fields: [presetChargeId], references: [id], onDelete: SetNull)
+  title          String        @db.VarChar(120)
+  amount         Int
+
+  @@index([paymentId])
+}
+
+model Expense {
+  id            String          @id @default(cuid())
+  clientId      String
+  client        Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  category      ExpenseCategory
+  amount        Int
+  paymentMethod PaymentMethod
+  notes         String          @db.Text
+  createdById   String?
+  createdBy     User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([clientId, createdAt(sort: Desc)])
+  @@index([clientId, category, createdAt(sort: Desc)])
 }
