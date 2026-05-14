@@ -27,13 +27,22 @@ const Stars = ({ value }: { value: number }) => (
   </span>
 );
 
+const EMPTY_INTERNAL: InternalFeedbackSummary = {
+  total: 0,
+  open: 0,
+  resolved: 0,
+  ratedCount: 0,
+  avgRating: null,
+};
+
 export default function ReputationPanel({
   businessInfo,
-  internal,
+  internal: internalProp,
 }: {
   businessInfo: BusinessInfo | null;
-  internal: InternalFeedbackSummary;
+  internal: InternalFeedbackSummary | null | undefined;
 }) {
+  const internal = internalProp ?? EMPTY_INTERNAL;
   const hasGoogle =
     !!businessInfo &&
     typeof businessInfo.rating === "number" &&

@@ -7,7 +7,6 @@ import ReputationPanel, {
   type InternalFeedbackSummary,
 } from "@/components/ReputationPanel";
 import AdminDashboard from "@/components/AdminDashboard";
-import ReportsPanel from "@/components/ReportsPanel";
 import { useStoredUser } from "@/lib/client-auth";
 import { useEffect, useState } from "react";
 
@@ -28,6 +27,7 @@ type DashboardData = {
 export default function Dashboard() {
   const user = useStoredUser();
   const [data, setData] = useState<DashboardData | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (user?.role === "SUPER_ADMIN") return;
@@ -36,12 +36,27 @@ export default function Dashboard() {
         Authorization: `Bearer ${localStorage.getItem("token")}`,
       },
     })
-      .then(res => res.json())
-      .then(setData);
+      .then(async res => {
+        const body = await res.json().catch(() => null);
+        if (!res.ok || !body || typeof body !== "object" || "error" in body) {
+          setError(body?.error ?? `Request failed (${res.status})`);
+          return;
+        }
+        setData(body as DashboardData);
+      })
+      .catch(err => setError(err?.message ?? "Failed to load dashboard"));
   }, [user?.role]);
 
   if (user?.role === "SUPER_ADMIN") {
     return <AdminDashboard />;
+  }
+
+  if (error) {
+    return (
+      <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        Failed to load dashboard: {error}
+      </p>
+    );
   }
 
   if (!data) {
@@ -82,8 +97,6 @@ export default function Dashboard() {
         source={data.subscriptionSource}
         error={data.subscriptionError}
       />
-
-      {user?.role === "CLIENT_ADMIN" && <ReportsPanel />}
     </div>
   );
 }

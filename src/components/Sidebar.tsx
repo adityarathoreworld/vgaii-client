@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
+  BarChart3,
   Building2,
   Calendar,
   ClipboardList,
@@ -31,6 +32,7 @@ const CLIENT_NAV: NavItem[] = [
   { href: "/patients", label: "Patients", icon: Stethoscope, module: "patients" },
   { href: "/appointments", label: "Appointments", icon: Calendar, module: "appointments" },
   { href: "/feedbacks", label: "Feedbacks", icon: MessageSquare, module: "feedback" },
+  { href: "/reports", label: "Reports", icon: BarChart3, adminOnly: true },
   { href: "/staff", label: "Team", icon: Users, adminOnly: true },
   { href: "/activity", label: "Activity", icon: Activity, adminOnly: true },
   { href: "/profile", label: "Profile", icon: UserRound, adminOnly: true },
