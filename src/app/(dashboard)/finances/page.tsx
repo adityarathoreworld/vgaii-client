@@ -21,9 +21,9 @@ type TabDef = {
 const TABS: TabDef[] = [
   { key: "payment", label: "Payment Entry" },
   { key: "expense", label: "Expenses" },
+  { key: "presets", label: "Preset Charges", adminOnly: true },
   { key: "summary", label: "Daily Summary" },
   { key: "reports", label: "Reports" },
-  { key: "presets", label: "Preset Charges", adminOnly: true },
 ];
 
 export default function FinancesPage() {
