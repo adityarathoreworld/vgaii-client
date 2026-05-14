@@ -5,6 +5,8 @@ import RoleGuard from "@/components/RoleGuard";
 import { useStoredUser } from "@/lib/client-auth";
 import PaymentEntryTab from "@/components/finances/PaymentEntryTab";
 import PresetChargesTab from "@/components/finances/PresetChargesTab";
+import ExpenseEntryTab from "@/components/finances/ExpenseEntryTab";
+import DailySummaryTab from "@/components/finances/DailySummaryTab";
 
 type Tab = "payment" | "expense" | "summary" | "reports" | "presets";
 
@@ -69,24 +71,14 @@ function FinancesPageInner() {
       </div>
 
       {tab === "payment" && <PaymentEntryTab />}
+      {tab === "expense" && <ExpenseEntryTab />}
+      {tab === "summary" && <DailySummaryTab />}
       {tab === "presets" && isAdmin && <PresetChargesTab />}
-      {(tab === "expense" || tab === "summary" || tab === "reports") && (
-        <ComingSoon tab={tab} />
+      {tab === "reports" && (
+        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center text-sm text-slate-500">
+          Reports ship in the next update.
+        </div>
       )}
-    </div>
-  );
-}
-
-function ComingSoon({ tab }: { tab: Tab }) {
-  const labels: Record<string, string> = {
-    expense: "Expense entry",
-    summary: "Daily summary",
-    reports: "Reports",
-  };
-  return (
-    <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center text-sm text-slate-500">
-      {labels[tab]} ships in the next update. Patient payments and preset
-      charges are live now.
     </div>
   );
 }
