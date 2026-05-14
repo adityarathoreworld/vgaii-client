@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { Banknote, CreditCard, Plus, Search, Smartphone, Trash2, UserPlus, Wallet, X } from "lucide-react";
+import { Banknote, CreditCard, Link2, Plus, Smartphone, Trash2, UserPlus, Wallet, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { rupeesToPaise, formatRupees } from "@/lib/currency";
+import { canonicalPhone } from "@/lib/phone";
 import type { PaymentMethod } from "@/lib/constants";
 
 type Preset = {
@@ -85,25 +86,37 @@ const METHOD_DEFS: Array<{
 const newKey = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 export default function PaymentEntryTab() {
-  // Patient picker — either link to an existing lead/patient, or record
-  // a walk-in by typing name + phone.
+  // Patient picker — phone-first lookup. Type a phone number; if it
+  // matches an existing patient we offer one-click link, otherwise the
+  // receptionist types a name and we record a walk-in payment with the
+  // entered phone snapshotted onto the row.
   const [linkedLead, setLinkedLead] = useState<LeadHit | null>(null);
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [walkInName, setWalkInName] = useState("");
-  const [walkInPhone, setWalkInPhone] = useState("");
+  const [phone, setPhone] = useState("");
+  const [name, setName] = useState("");
+  const [debouncedPhone, setDebouncedPhone] = useState("");
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 250);
+    const t = setTimeout(() => setDebouncedPhone(phone), 250);
     return () => clearTimeout(t);
-  }, [search]);
+  }, [phone]);
 
+  // Match against existing leads/patients by the canonical 10-digit
+  // tail so spaces, dashes, and +91 prefixes all collapse to the same
+  // key (mirrors phoneNormalized in the schema).
+  const canonical = canonicalPhone(debouncedPhone);
   const { data: leadsData } = useSWR<LeadsResponse>(
-    !linkedLead && debouncedSearch.trim().length >= 2
-      ? `/api/leads?all=1&search=${encodeURIComponent(debouncedSearch.trim())}`
+    !linkedLead && canonical.length >= 6
+      ? `/api/leads?all=1&search=${encodeURIComponent(canonical)}`
       : null,
   );
-  const leadHits = leadsData?.leads ?? [];
+  // Filter to exact 10-digit tail matches when we have a full phone — the
+  // server endpoint does a LIKE search so partial digits can pull in
+  // unrelated rows.
+  const leadHits = useMemo(() => {
+    const hits = leadsData?.leads ?? [];
+    if (canonical.length < 10) return hits;
+    return hits.filter(h => canonicalPhone(h.phone) === canonical);
+  }, [leadsData, canonical]);
 
   const { data: presetsData } = useSWR<PresetsResponse>("/api/preset-charges");
   const presets = useMemo(() => presetsData?.charges ?? [], [presetsData]);
@@ -153,11 +166,20 @@ export default function PaymentEntryTab() {
   })();
   const finalPaise = Math.max(0, totalPaise - discountPaise);
 
+  const linkLead = (lead: LeadHit) => {
+    setLinkedLead(lead);
+    setPhone(lead.phone);
+    setName(lead.name);
+  };
+
+  const unlink = () => {
+    setLinkedLead(null);
+  };
+
   const reset = () => {
     setLinkedLead(null);
-    setSearch("");
-    setWalkInName("");
-    setWalkInPhone("");
+    setPhone("");
+    setName("");
     setItems([]);
     setDiscountInput("");
     setMethod("cash");
@@ -168,8 +190,8 @@ export default function PaymentEntryTab() {
     setError(null);
     setSavedMsg(null);
     if (items.length === 0) return setError("Add at least one charge");
-    if (!linkedLead && walkInName.trim().length < 1) {
-      return setError("Pick a patient or enter a walk-in name");
+    if (!linkedLead && name.trim().length < 1) {
+      return setError("Enter a name or link an existing patient");
     }
 
     setBusy(true);
@@ -179,8 +201,8 @@ export default function PaymentEntryTab() {
         headers: authHeaders(),
         body: JSON.stringify({
           leadId: linkedLead?.id,
-          patientName: linkedLead ? undefined : walkInName.trim() || undefined,
-          patientPhone: linkedLead ? undefined : walkInPhone.trim() || undefined,
+          patientName: linkedLead ? undefined : name.trim() || undefined,
+          patientPhone: linkedLead ? undefined : phone.trim() || undefined,
           items: items.map(i => ({
             presetChargeId: i.presetChargeId,
             title: i.title,
@@ -212,90 +234,100 @@ export default function PaymentEntryTab() {
         {/* Patient picker */}
         <section className="rounded-lg border border-slate-200 bg-white px-4 py-3">
           <h2 className="text-base font-semibold text-slate-900">Patient</h2>
-          {linkedLead ? (
-            <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5">
-              <div>
-                <p className="font-medium text-slate-900">{linkedLead.name}</p>
-                <p className="text-xs text-slate-600">{linkedLead.phone}</p>
+          <p className="text-xs text-slate-500">
+            Enter a phone number first — we&apos;ll auto-link if it matches
+            an existing patient.
+          </p>
+
+          <div className="mt-3 space-y-3">
+            <label className="block">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                Phone *
+              </span>
+              <input
+                value={phone}
+                onChange={e => {
+                  setPhone(e.target.value);
+                  if (linkedLead) setLinkedLead(null);
+                }}
+                inputMode="tel"
+                autoFocus
+                placeholder="10-digit number"
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+              />
+            </label>
+
+            {linkedLead ? (
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5">
+                <div className="inline-flex items-center gap-2">
+                  <Link2 size={14} className="text-emerald-600" />
+                  <div>
+                    <p className="font-medium text-slate-900">
+                      {linkedLead.name}
+                    </p>
+                    <p className="text-xs text-slate-600">{linkedLead.phone}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={unlink}
+                  className="text-xs text-slate-500 hover:text-slate-700"
+                >
+                  Unlink
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setLinkedLead(null)}
-                className="text-xs text-slate-500 hover:text-slate-700"
-              >
-                Change
-              </button>
-            </div>
-          ) : (
-            <div className="mt-3 space-y-3">
-              <div className="relative">
-                <Search
-                  size={14}
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                />
+            ) : leadHits.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-xs text-slate-500">
+                  Existing {leadHits.length === 1 ? "patient" : "patients"}{" "}
+                  with this number:
+                </p>
+                <ul className="divide-y divide-slate-100 rounded-lg border border-indigo-200 bg-indigo-50/40">
+                  {leadHits.slice(0, 4).map(h => (
+                    <li
+                      key={h.id}
+                      className="flex items-center justify-between gap-3 px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-900">
+                          {h.name}
+                        </p>
+                        <p className="truncate text-xs text-slate-500">
+                          {h.phone}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => linkLead(h)}
+                        className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700"
+                      >
+                        <Link2 size={12} />
+                        Link
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {!linkedLead && (
+              <label className="block">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  Name *
+                </span>
                 <input
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder="Search existing patient by name or phone…"
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 pl-9 text-sm text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder={
+                    canonical.length >= 10 && leadHits.length === 0
+                      ? "No match — enter walk-in name"
+                      : "Patient name"
+                  }
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                 />
-                {leadHits.length > 0 && (
-                  <ul className="absolute left-0 right-0 z-10 mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-                    {leadHits.slice(0, 8).map(h => (
-                      <li key={h.id}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setLinkedLead(h);
-                            setSearch("");
-                          }}
-                          className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
-                        >
-                          <span className="font-medium text-slate-900">
-                            {h.name}
-                          </span>
-                          <span className="ml-2 text-xs text-slate-500">
-                            {h.phone}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 text-xs text-slate-500">
-                <span className="flex-1 border-t border-slate-200" />
-                <span>or walk-in</span>
-                <span className="flex-1 border-t border-slate-200" />
-              </div>
-
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                <label className="block">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                    Name
-                  </span>
-                  <input
-                    value={walkInName}
-                    onChange={e => setWalkInName(e.target.value)}
-                    placeholder="Walk-in name"
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                    Phone (optional)
-                  </span>
-                  <input
-                    value={walkInPhone}
-                    onChange={e => setWalkInPhone(e.target.value)}
-                    inputMode="tel"
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                  />
-                </label>
-              </div>
-            </div>
-          )}
+              </label>
+            )}
+          </div>
         </section>
 
         {/* Preset charges */}
