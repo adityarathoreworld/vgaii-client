@@ -110,8 +110,8 @@ function ActivityPageInner() {
   }, [entries]);
 
   return (
-    <div className="space-y-3" data-tour="activity-feed">
-      <header>
+    <div className="space-y-3">
+      <header data-tour="activity-feed">
         <h1 className="text-lg font-bold text-slate-900">Activity log</h1>
         <p className="text-sm text-slate-500">
           Append-only record of every action taken by you and your staff —

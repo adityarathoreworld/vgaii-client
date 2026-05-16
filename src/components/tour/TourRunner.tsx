@@ -34,12 +34,20 @@ export default function TourRunner() {
   }, [active, Joyride]);
 
   // v3's onEvent gets a TourData payload + a Controls object. We listen
-  // for step:after (advance), status finished (complete), or status
-  // skipped (clean up demo data and mark done).
+  // for step:after (advance), error:target_not_found (skip the stuck
+  // step so we don't strand the user behind a black overlay), and
+  // status finished/skipped (clean up + stop).
   const onEvent: EventHandler = useCallback(
     data => {
       const { type, action, status } = data;
       if (type === "step:after" && action === "next") {
+        next();
+        return;
+      }
+      if (type === "error:target_not_found") {
+        console.warn(
+          `[TourRunner] target_not_found at step ${data.index} — advancing`,
+        );
         next();
         return;
       }
@@ -63,6 +71,7 @@ export default function TourRunner() {
         stepIndex={stepIndex}
         run={active}
         continuous
+        scrollToFirstStep
         onEvent={onEvent}
         options={{
           // 'skip' adds the skip button; 'back'/'primary' are next/back.
@@ -70,6 +79,12 @@ export default function TourRunner() {
           primaryColor: "#4f46e5",
           showProgress: true,
           zIndex: 10000,
+          // Wait up to 5s for the target after a route push before
+          // firing target_not_found. Plenty of time for SWR fetches.
+          targetWaitTimeout: 5000,
+          // Leave room for the sticky topbar (~56px) so scroll-to-step
+          // doesn't put the target underneath it.
+          scrollOffset: 80,
         }}
       />
     </JoyrideBoundary>
