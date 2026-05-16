@@ -8,6 +8,7 @@ import ImpersonationBanner from "@/components/ImpersonationBanner";
 import { TourProvider } from "@/components/tour/TourContext";
 import WelcomeOnboardingModal from "@/components/tour/WelcomeOnboardingModal";
 import TourRunner from "@/components/tour/TourRunner";
+import TourController from "@/components/tour/TourController";
 import { fetcher } from "@/lib/fetcher";
 
 const APP_VERSION = "1.0.0";
@@ -84,6 +85,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </div>
         <WelcomeOnboardingModal />
         <TourRunner />
+        <TourController />
       </TourProvider>
     </SWRConfig>
   );
