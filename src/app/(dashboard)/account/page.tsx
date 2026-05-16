@@ -1,6 +1,9 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
+import useSWR from "swr";
+import { Sparkles, Trash2 } from "lucide-react";
 import { useStoredUser } from "@/lib/client-auth";
 import { passwordPolicyDescription } from "@/lib/password-policy";
 
@@ -150,7 +153,118 @@ export default function AccountPage() {
           </div>
         </form>
       </section>
+
+      {user?.role === "CLIENT_ADMIN" && <OnboardingControls />}
     </div>
+  );
+}
+
+function OnboardingControls() {
+  const router = useRouter();
+  const { data, mutate } = useSWR<{
+    state: string;
+    demoSeeded: boolean;
+  }>("/api/onboarding/state", { revalidateOnFocus: false });
+  const [busy, setBusy] = useState<"restart" | "clear" | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const restart = async () => {
+    if (
+      !confirm(
+        "Restart the tour? We'll re-seed the demo data and walk you through the app again.",
+      )
+    )
+      return;
+    setBusy("restart");
+    setMsg(null);
+    try {
+      const res = await fetch("/api/onboarding/start", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token") ?? ""}`,
+        },
+        body: JSON.stringify({ force: true }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setMsg(
+          typeof body?.error === "string"
+            ? body.error
+            : "Couldn't restart the tour",
+        );
+        return;
+      }
+      router.push("/dashboard");
+      mutate();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const clearDemo = async () => {
+    if (
+      !confirm(
+        "Delete all demo leads, appointments, and payments? Real data stays untouched.",
+      )
+    )
+      return;
+    setBusy("clear");
+    setMsg(null);
+    try {
+      const res = await fetch("/api/onboarding/complete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token") ?? ""}`,
+        },
+      });
+      if (!res.ok) {
+        setMsg("Couldn't clear demo data");
+        return;
+      }
+      setMsg("Demo data cleared.");
+      mutate();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white">
+      <div className="border-b border-slate-200 px-4 py-2.5">
+        <h2 className="text-base font-semibold text-slate-900">
+          Onboarding tour
+        </h2>
+        <p className="text-xs text-slate-500">
+          Replay the welcome tour anytime, or sweep out any demo data left
+          behind from a tour you didn&apos;t finish.
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 px-4 py-3">
+        <button
+          type="button"
+          onClick={restart}
+          disabled={busy !== null}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+        >
+          <Sparkles size={12} />
+          {busy === "restart" ? "Restarting…" : "Restart tour"}
+        </button>
+        {data?.demoSeeded && (
+          <button
+            type="button"
+            onClick={clearDemo}
+            disabled={busy !== null}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
+          >
+            <Trash2 size={12} />
+            {busy === "clear" ? "Clearing…" : "Clear demo data"}
+          </button>
+        )}
+        {msg && <p className="text-xs text-slate-500">{msg}</p>}
+      </div>
+    </section>
   );
 }
 

@@ -9,6 +9,7 @@ import { TourProvider } from "@/components/tour/TourContext";
 import WelcomeOnboardingModal from "@/components/tour/WelcomeOnboardingModal";
 import TourRunner from "@/components/tour/TourRunner";
 import TourController from "@/components/tour/TourController";
+import ResumeTourBanner from "@/components/tour/ResumeTourBanner";
 import { fetcher } from "@/lib/fetcher";
 
 const APP_VERSION = "1.0.0";
@@ -73,6 +74,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             <div className="flex min-h-screen min-w-0 flex-1 flex-col">
               <TopBar onMenuClick={() => setSidebarOpen(true)} />
               <ImpersonationBanner />
+              <ResumeTourBanner />
 
               <main className="min-w-0 flex-1 px-4 py-4 md:px-6">{children}</main>
 
