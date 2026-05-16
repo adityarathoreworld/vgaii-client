@@ -207,6 +207,15 @@ function AppointmentsPageInner() {
   const [addOpen, setAddOpen] = useState(
     () => searchParams.get("add") === "1",
   );
+  // Re-sync when the URL flips ?add=1 on (tour deep-link, dashboard
+  // Quick Action). store-and-compare during render so eslint's
+  // react-hooks/set-state-in-effect rule stays happy.
+  const wantAddFromUrl = searchParams.get("add") === "1";
+  const [lastWantAdd, setLastWantAdd] = useState(wantAddFromUrl);
+  if (wantAddFromUrl !== lastWantAdd) {
+    setLastWantAdd(wantAddFromUrl);
+    if (wantAddFromUrl) setAddOpen(true);
+  }
 
   // Modal-driven edit/mark-visited. The page no longer owns the form
   // state — EditAppointmentModal seeds itself from the selected row.

@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTour } from "@/components/tour/TourContext";
 import { TOUR_STEPS } from "@/components/tour/steps";
+import { demoIdsFor, resolvePlaceholders } from "@/components/tour/demo-ids";
+import { useStoredUser } from "@/lib/client-auth";
 
 // Watches `stepIndex` from TourContext. Whenever the index changes
 // and the current pathname doesn't match the step's route, push the
@@ -23,9 +25,19 @@ export default function TourController() {
   const { active, stepIndex, stop } = useTour();
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const user = useStoredUser();
+  const clientId = user?.clientId ?? null;
   // Track which index we've already routed for so an unrelated render
   // doesn't re-trigger a push.
   const handledIndex = useRef<number | null>(null);
+
+  // Computed once per clientId; demo IDs are deterministic so we don't
+  // need to wait for the start endpoint to return them.
+  const demoIds = useMemo(
+    () => (clientId ? demoIdsFor(clientId) : null),
+    [clientId],
+  );
 
   useEffect(() => {
     if (!active) {
@@ -42,12 +54,21 @@ export default function TourController() {
     if (handledIndex.current === stepIndex) return;
     handledIndex.current = stepIndex;
 
-    const targetPath = step.route;
+    const targetPath = resolvePlaceholders(step.route, demoIds);
     const targetQuery = step.routeQuery ?? "";
-    if (pathname !== targetPath) {
-      router.push(`${targetPath}${targetQuery}`);
+    // Compare full URL so same-path / different-query transitions
+    // (e.g. /appointments → /appointments?add=1) still trigger a push.
+    // Without this the modal-opening step would no-op because the
+    // pathname hadn't changed.
+    const currentQuery = searchParams.toString();
+    const currentFull = currentQuery
+      ? `${pathname}?${currentQuery}`
+      : pathname;
+    const targetFull = `${targetPath}${targetQuery}`;
+    if (currentFull !== targetFull) {
+      router.push(targetFull);
     }
-  }, [active, stepIndex, pathname, router, stop]);
+  }, [active, stepIndex, pathname, searchParams, router, stop, demoIds]);
 
   return null;
 }

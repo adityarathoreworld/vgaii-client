@@ -3,7 +3,7 @@
 import { use, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, CreditCard, Globe, Mail, MapPin, Phone } from "lucide-react";
 import StatusPill from "@/components/StatusPill";
 import RoleGuard from "@/components/RoleGuard";
@@ -137,8 +137,29 @@ function PatientDetailPageInner({
   const [bookingUrl, setBookingUrl] = useState<string | null>(null);
   const [bookingOpen, setBookingOpen] = useState(false);
 
-  // Detail tabs (Overview / Appointments / Medical History).
-  const [tab, setTab] = useState<DetailTab>("overview");
+  // Detail tabs (Overview / Appointments / Medical History / Payments).
+  // Seed from ?tab=… so other pages (and the onboarding tour) can deep-
+  // link straight into a specific tab.
+  const searchParams = useSearchParams();
+  const tabFromUrl: DetailTab | null = (() => {
+    const t = searchParams.get("tab");
+    return t === "overview" ||
+      t === "appointments" ||
+      t === "medical-history" ||
+      t === "payments"
+      ? (t as DetailTab)
+      : null;
+  })();
+  const [tab, setTab] = useState<DetailTab>(tabFromUrl ?? "overview");
+  // Re-sync when the URL flips to a different tab after mount (the
+  // tour pushes `?tab=medical-history` while already on the detail
+  // page). store-and-compare during render keeps eslint's
+  // set-state-in-effect rule happy.
+  const [lastTabFromUrl, setLastTabFromUrl] = useState(tabFromUrl);
+  if (tabFromUrl !== lastTabFromUrl) {
+    setLastTabFromUrl(tabFromUrl);
+    if (tabFromUrl) setTab(tabFromUrl);
+  }
 
   const load = () =>
     fetch(`/api/patients/${id}`, { headers: authHeaders() })
@@ -279,7 +300,10 @@ function PatientDetailPageInner({
       </Link>
 
       {/* HEADER: identity + primary CTA */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white px-4 py-3">
+      <div
+        data-tour="patient-header"
+        className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white px-4 py-3"
+      >
         <div className="flex min-w-0 items-center gap-4">
           <div
             className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-xl font-bold text-white ${avatarBg}`}
@@ -337,7 +361,10 @@ function PatientDetailPageInner({
       </div>
 
       {/* TAB NAV */}
-      <div className="rounded-lg border border-slate-200 bg-white">
+      <div
+        data-tour="patient-tabs"
+        className="rounded-lg border border-slate-200 bg-white"
+      >
         <div className="flex border-b border-slate-200">
           {TAB_DEFS.map(({ key, label }) => {
             const isActive = tab === key;
@@ -1070,7 +1097,7 @@ function MedicalHistory({
 
   return (
     <div className="space-y-3">
-      <section>
+      <section data-tour="vitals-trend">
         <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
           Vitals trend
         </h2>
@@ -1097,7 +1124,7 @@ function MedicalHistory({
         </div>
       </section>
 
-      <section>
+      <section data-tour="visit-timeline">
         <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
           Visits ({timeline.length})
         </h2>

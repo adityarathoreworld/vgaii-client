@@ -105,7 +105,10 @@ function Shell({
           </button>
         </div>
 
-        <div className="flex border-b border-slate-200">
+        <div
+          data-tour="appt-modal-mode-tabs"
+          className="flex border-b border-slate-200"
+        >
           <ModeTab
             label="Cal.com booking"
             active={effectiveMode === "calcom"}
@@ -334,7 +337,11 @@ function ManualForm({
   );
 
   return (
-    <form onSubmit={submit} className="px-4 py-4">
+    <form
+      onSubmit={submit}
+      data-tour="appt-modal-form"
+      className="px-4 py-4"
+    >
       <div className="space-y-3">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <label className="block">

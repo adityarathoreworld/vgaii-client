@@ -51,7 +51,10 @@ export const seedDemoData = async (
   const lead3Id = id(clientId, "lead_3");
   const appt1Id = id(clientId, "appt_1");
   const appt2Id = id(clientId, "appt_2");
+  const appt3Id = id(clientId, "appt_3");
+  const appt4Id = id(clientId, "appt_4");
   const payment1Id = id(clientId, "payment_1");
+  const payment2Id = id(clientId, "payment_2");
 
   const leadCommon = (phone: string) => ({
     clientId,
@@ -116,6 +119,10 @@ export const seedDemoData = async (
       },
       update: {},
     }),
+    // Three completed visits over the past three months show the
+    // Medical-History tab's vitals trend charts with enough data points
+    // to be meaningful (one observation can't draw a line). Weight ticks
+    // down 2kg, sugar trends from borderline to in-range, BP improves.
     prisma.appointment.upsert({
       where: { id: appt2Id },
       create: {
@@ -124,14 +131,58 @@ export const seedDemoData = async (
         leadId: lead3Id,
         name: "Demo · Priya Iyer",
         phone: "9000000003",
-        date: startOfDay(-1, 11),
+        date: startOfDay(-90, 11),
         status: "completed",
-        completedAt: startOfDay(-1, 11),
+        completedAt: startOfDay(-90, 11),
         source: DEMO_SOURCE,
-        notes: "Routine follow-up",
+        notes: "First visit — borderline sugar.",
+        diagnosis: "Pre-diabetes. Lifestyle changes advised.",
+        medicines: ["Metformin 500mg — twice a day"],
+        weightKg: 72,
+        sugarMgDl: 145,
+        bpSystolic: 138,
+        bpDiastolic: 88,
+      },
+      update: {},
+    }),
+    prisma.appointment.upsert({
+      where: { id: appt3Id },
+      create: {
+        id: appt3Id,
+        clientId,
+        leadId: lead3Id,
+        name: "Demo · Priya Iyer",
+        phone: "9000000003",
+        date: startOfDay(-45, 10),
+        status: "completed",
+        completedAt: startOfDay(-45, 10),
+        source: DEMO_SOURCE,
+        notes: "Six-week follow-up. Patient reports better energy.",
+        diagnosis: "Sugar trending down. Stay on current regimen.",
+        medicines: ["Metformin 500mg — twice a day"],
+        weightKg: 70.5,
+        sugarMgDl: 125,
+        bpSystolic: 128,
+        bpDiastolic: 84,
+      },
+      update: {},
+    }),
+    prisma.appointment.upsert({
+      where: { id: appt4Id },
+      create: {
+        id: appt4Id,
+        clientId,
+        leadId: lead3Id,
+        name: "Demo · Priya Iyer",
+        phone: "9000000003",
+        date: startOfDay(-7, 11),
+        status: "completed",
+        completedAt: startOfDay(-7, 11),
+        source: DEMO_SOURCE,
+        notes: "Routine follow-up. Sugar in-range.",
         diagnosis: "Stable. Continue current medication.",
         medicines: ["Metformin 500mg — twice a day"],
-        weightKg: 68,
+        weightKg: 70,
         sugarMgDl: 110,
         bpSystolic: 120,
         bpDiastolic: 80,
@@ -144,7 +195,7 @@ export const seedDemoData = async (
         id: payment1Id,
         clientId,
         leadId: lead3Id,
-        appointmentId: appt2Id,
+        appointmentId: appt4Id,
         patientName: "Demo · Priya Iyer",
         patientPhone: "9000000003",
         amount: 50000,
@@ -156,8 +207,30 @@ export const seedDemoData = async (
         notes: `${DEMO_NOTES_TAG} Consultation`,
         collectedById: userId,
         items: {
+          create: [{ title: "Consultation", amount: 50000 }],
+        },
+      },
+      update: {},
+    }),
+    prisma.payment.upsert({
+      where: { id: payment2Id },
+      create: {
+        id: payment2Id,
+        clientId,
+        leadId: lead3Id,
+        appointmentId: appt3Id,
+        patientName: "Demo · Priya Iyer",
+        patientPhone: "9000000003",
+        amount: 80000,
+        discount: 10000,
+        finalAmount: 70000,
+        paymentMethod: "upi",
+        notes: `${DEMO_NOTES_TAG} Consultation + Lab fee`,
+        collectedById: userId,
+        items: {
           create: [
             { title: "Consultation", amount: 50000 },
+            { title: "Lab fee", amount: 30000 },
           ],
         },
       },
@@ -167,8 +240,8 @@ export const seedDemoData = async (
 
   return {
     leads: [lead1Id, lead2Id, lead3Id],
-    appointments: [appt1Id, appt2Id],
-    payments: [payment1Id],
+    appointments: [appt1Id, appt2Id, appt3Id, appt4Id],
+    payments: [payment1Id, payment2Id],
   };
 };
 
