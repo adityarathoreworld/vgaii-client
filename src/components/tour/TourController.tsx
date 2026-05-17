@@ -55,7 +55,12 @@ export default function TourController() {
     handledIndex.current = stepIndex;
 
     const targetPath = resolvePlaceholders(step.route, demoIds);
-    const targetQuery = step.routeQuery ?? "";
+    // routeQuery also needs placeholder resolution so steps can deep-
+    // link to specific demo rows in the query string (e.g.
+    // ?expand={completedApptId} to pre-open a visit card on the
+    // medical-history tab). Without this, the literal "{completedApptId}"
+    // would land in the URL and the page wouldn't match anything.
+    const targetQuery = resolvePlaceholders(step.routeQuery ?? "", demoIds);
     // Compare full URL so same-path / different-query transitions
     // (e.g. /appointments → /appointments?add=1) still trigger a push.
     // Without this the modal-opening step would no-op because the

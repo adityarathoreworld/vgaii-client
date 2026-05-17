@@ -173,6 +173,18 @@ function PatientDetailPageInner({
     if (tabFromUrl) setTab(tabFromUrl);
   }
 
+  // ?expand=<apptId> seeds (and re-syncs) the open card on the
+  // Medical-history tab. The onboarding tour pushes
+  // `?tab=medical-history&expand=<demoApptId>` for its visit-timeline
+  // step so the demo visit's vitals / diagnosis / medicines are
+  // already visible when the spotlight lands.
+  const expandFromUrl = searchParams.get("expand");
+  const [lastExpandFromUrl, setLastExpandFromUrl] = useState(expandFromUrl);
+  if (expandFromUrl !== lastExpandFromUrl) {
+    setLastExpandFromUrl(expandFromUrl);
+    if (expandFromUrl) setExpandedApptId(expandFromUrl);
+  }
+
   const load = () =>
     fetch(`/api/patients/${id}`, { headers: authHeaders() })
       .then(res => res.json())

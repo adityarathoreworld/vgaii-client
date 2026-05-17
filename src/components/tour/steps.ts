@@ -80,12 +80,16 @@ export const TOUR_STEPS: TourStep[] = [
     placement: "bottom",
   },
   {
+    // Deep-link with ?expand=<completedApptId> so the most recent
+    // demo visit card is already open when the spotlight lands. A
+    // collapsed timeline looks empty — pre-opening one card lets the
+    // user actually see what each entry holds.
     route: "/patients/{leadId}",
-    routeQuery: "?tab=medical-history",
+    routeQuery: "?tab=medical-history&expand={completedApptId}",
     target: '[data-tour="visit-timeline"]',
     title: "Visit timeline",
     content:
-      "Each visit lists diagnosis, medicines, notes, and the vitals captured that day — newest first.",
+      "Each visit card opens to show the diagnosis, the medicines you prescribed, your notes, and the vitals you recorded that day. We opened the most recent visit so you can see the layout — tap any other card to expand it.",
     placement: "top",
   },
 
