@@ -10,6 +10,7 @@ import WelcomeOnboardingModal from "@/components/tour/WelcomeOnboardingModal";
 import TourRunner from "@/components/tour/TourRunner";
 import TourController from "@/components/tour/TourController";
 import ResumeTourBanner from "@/components/tour/ResumeTourBanner";
+import QuickActionFab from "@/components/QuickActionFab";
 import { fetcher } from "@/lib/fetcher";
 
 const APP_VERSION = "1.0.0";
@@ -88,6 +89,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <WelcomeOnboardingModal />
         <TourRunner />
         <TourController />
+        <QuickActionFab />
       </TourProvider>
     </SWRConfig>
   );

@@ -70,6 +70,10 @@ function FinancesPageInner() {
       phone: searchParams.get("phone") ?? "",
     };
   })();
+  // ?new=1 from the floating quick-action FAB opens the entry modal
+  // straight away (no prefill — receptionist types the phone in the
+  // first field).
+  const autoOpenNew = searchParams.get("new") === "1";
 
   const visibleTabs = TABS.filter(t => !t.adminOnly || isAdmin);
 
@@ -105,7 +109,12 @@ function FinancesPageInner() {
         </div>
       </div>
 
-      {tab === "payment" && <PaymentsListTab prefillLead={prefillLead} />}
+      {tab === "payment" && (
+        <PaymentsListTab
+          prefillLead={prefillLead}
+          autoOpenNew={autoOpenNew}
+        />
+      )}
       {tab === "expense" && <ExpenseEntryTab />}
       {tab === "summary" && <DailySummaryTab />}
       {tab === "reports" && <ReportsTab />}

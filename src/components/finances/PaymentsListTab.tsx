@@ -59,12 +59,20 @@ const rangeFor = (
 
 type Props = {
   prefillLead?: LeadHit;
+  // True when the page was deep-linked with ?new=1 — typically from
+  // the floating quick-action button. Opens the modal on first paint
+  // without prefilling a lead.
+  autoOpenNew?: boolean;
 };
 
-export default function PaymentsListTab({ prefillLead }: Props = {}) {
+export default function PaymentsListTab({
+  prefillLead,
+  autoOpenNew,
+}: Props = {}) {
   // Open the entry modal automatically when the page is deep-linked with
-  // a leadId so receptionists land straight in the form.
-  const [open, setOpen] = useState(!!prefillLead);
+  // a leadId so receptionists land straight in the form, or with ?new=1
+  // from the floating quick-action FAB.
+  const [open, setOpen] = useState(!!prefillLead || !!autoOpenNew);
 
   const [preset, setPreset] = useState<Preset>("today");
   const [method, setMethod] = useState<"" | PaymentMethod>("");
