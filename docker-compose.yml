@@ -40,7 +40,7 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "3000:3000"
+      - "11000:11000"
     environment:
       # ─── Core ───────────────────────────────────────────────────────────
       DATABASE_URL: mysql://${MYSQL_USER:-crm}:${MYSQL_PASSWORD:-crm_password}@db:3306/${MYSQL_DATABASE:-crm}
