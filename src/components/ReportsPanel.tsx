@@ -154,7 +154,10 @@ export default function ReportsPanel() {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div
+        className="flex flex-wrap items-end justify-between gap-3"
+        data-tour="reports-charts"
+      >
         <div>
           <h2 className="text-lg font-bold text-slate-900">Reports</h2>
           <p className="text-xs text-slate-500">

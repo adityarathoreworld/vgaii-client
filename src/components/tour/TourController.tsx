@@ -1,30 +1,43 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTour } from "@/components/tour/TourContext";
 import { TOUR_STEPS } from "@/components/tour/steps";
+import { demoIdsFor, resolvePlaceholders } from "@/components/tour/demo-ids";
+import { useStoredUser } from "@/lib/client-auth";
 
-// Watches `stepIndex` from TourContext. Whenever the index changes:
-// 1. If the current pathname doesn't match the step's route, push the
-//    new route (+ optional query hint for modal-opening pages).
-// 2. Poll for the step's `waitFor` selector for up to 3 seconds. If it
-//    appears the tour proceeds naturally; if not, skip to the next step
-//    so a missing target can never wedge the user.
+// Watches `stepIndex` from TourContext. Whenever the index changes
+// and the current pathname doesn't match the step's route, push the
+// new route (+ optional query hint for modal-opening pages).
+//
+// We DON'T poll for the target selector here — that races against
+// Joyride's own targetWaitTimeout and ended up advancing the tour
+// before Joyride could draw the tooltip, leaving the user with a
+// black overlay and nothing to click. Joyride handles the wait
+// natively and fires `error:target_not_found` if it can't resolve;
+// TourRunner advances on that event.
 //
 // Doesn't render anything — mounted as a sibling of TourRunner inside
-// the TourProvider. Single source of truth for "the tour is on page X".
-
-const POLL_INTERVAL_MS = 80;
-const POLL_TIMEOUT_MS = 3000;
+// the TourProvider.
 
 export default function TourController() {
-  const { active, stepIndex, next, stop } = useTour();
+  const { active, stepIndex, stop } = useTour();
   const router = useRouter();
   const pathname = usePathname();
-  // Track which index we've already handled so an unrelated render
-  // doesn't re-trigger a route push.
+  const searchParams = useSearchParams();
+  const user = useStoredUser();
+  const clientId = user?.clientId ?? null;
+  // Track which index we've already routed for so an unrelated render
+  // doesn't re-trigger a push.
   const handledIndex = useRef<number | null>(null);
+
+  // Computed once per clientId; demo IDs are deterministic so we don't
+  // need to wait for the start endpoint to return them.
+  const demoIds = useMemo(
+    () => (clientId ? demoIdsFor(clientId) : null),
+    [clientId],
+  );
 
   useEffect(() => {
     if (!active) {
@@ -41,46 +54,26 @@ export default function TourController() {
     if (handledIndex.current === stepIndex) return;
     handledIndex.current = stepIndex;
 
-    let cancelled = false;
-
-    const targetPath = step.route;
-    const targetQuery = step.routeQuery ?? "";
-    const fullTarget = `${targetPath}${targetQuery}`;
-    if (pathname !== targetPath) {
-      router.push(fullTarget);
-      // After the route changes the effect re-runs (pathname update),
-      // and `handledIndex.current === stepIndex` short-circuits — so
-      // we won't push again. The wait-for poll runs on the next pass.
-      return;
+    const targetPath = resolvePlaceholders(step.route, demoIds);
+    // routeQuery also needs placeholder resolution so steps can deep-
+    // link to specific demo rows in the query string (e.g.
+    // ?expand={completedApptId} to pre-open a visit card on the
+    // medical-history tab). Without this, the literal "{completedApptId}"
+    // would land in the URL and the page wouldn't match anything.
+    const targetQuery = resolvePlaceholders(step.routeQuery ?? "", demoIds);
+    // Compare full URL so same-path / different-query transitions
+    // (e.g. /appointments → /appointments?add=1) still trigger a push.
+    // Without this the modal-opening step would no-op because the
+    // pathname hadn't changed.
+    const currentQuery = searchParams.toString();
+    const currentFull = currentQuery
+      ? `${pathname}?${currentQuery}`
+      : pathname;
+    const targetFull = `${targetPath}${targetQuery}`;
+    if (currentFull !== targetFull) {
+      router.push(targetFull);
     }
-
-    // Already on the right route. If there's no waitFor, the runner
-    // will render the step as soon as Joyride sees the new index. If
-    // there is one, poll until it shows up or timeout.
-    if (!step.waitFor) return;
-
-    const start = Date.now();
-    const tick = () => {
-      if (cancelled) return;
-      const el = document.querySelector(step.waitFor!);
-      if (el) return; // Joyride takes over from here.
-      if (Date.now() - start > POLL_TIMEOUT_MS) {
-        // Target didn't materialise — skip ahead so the tour keeps
-        // moving instead of stalling on an invisible step.
-        console.warn(
-          `[TourController] step ${stepIndex} target ${step.waitFor} not found; skipping`,
-        );
-        next();
-        return;
-      }
-      setTimeout(tick, POLL_INTERVAL_MS);
-    };
-    setTimeout(tick, POLL_INTERVAL_MS);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [active, stepIndex, pathname, router, next, stop]);
+  }, [active, stepIndex, pathname, searchParams, router, stop, demoIds]);
 
   return null;
 }

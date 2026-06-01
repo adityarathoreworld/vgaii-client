@@ -41,7 +41,7 @@ function FinancesPageInner() {
   // ?tab=payment&leadId=…&name=…&phone=… lets other pages deep-link
   // straight into a pre-filled payment entry form.
   const searchParams = useSearchParams();
-  const initialTab = (() => {
+  const tabFromUrl: Tab | null = (() => {
     const t = searchParams.get("tab");
     return t === "payment" ||
       t === "expense" ||
@@ -49,9 +49,18 @@ function FinancesPageInner() {
       t === "reports" ||
       t === "presets"
       ? (t as Tab)
-      : "payment";
+      : null;
   })();
-  const [tab, setTab] = useState<Tab>(initialTab);
+  const [tab, setTab] = useState<Tab>(tabFromUrl ?? "payment");
+  // Re-sync when the URL flips to a different tab after mount (the
+  // onboarding tour pushes `?tab=presets` while we're already on
+  // `?tab=payment`). store-and-compare keeps the React-19 set-state-in-
+  // effect lint happy.
+  const [lastTabFromUrl, setLastTabFromUrl] = useState(tabFromUrl);
+  if (tabFromUrl !== lastTabFromUrl) {
+    setLastTabFromUrl(tabFromUrl);
+    if (tabFromUrl) setTab(tabFromUrl);
+  }
   const prefillLead = (() => {
     const id = searchParams.get("leadId");
     if (!id) return undefined;
@@ -61,6 +70,10 @@ function FinancesPageInner() {
       phone: searchParams.get("phone") ?? "",
     };
   })();
+  // ?new=1 from the floating quick-action FAB opens the entry modal
+  // straight away (no prefill — receptionist types the phone in the
+  // first field).
+  const autoOpenNew = searchParams.get("new") === "1";
 
   const visibleTabs = TABS.filter(t => !t.adminOnly || isAdmin);
 
@@ -96,7 +109,12 @@ function FinancesPageInner() {
         </div>
       </div>
 
-      {tab === "payment" && <PaymentsListTab prefillLead={prefillLead} />}
+      {tab === "payment" && (
+        <PaymentsListTab
+          prefillLead={prefillLead}
+          autoOpenNew={autoOpenNew}
+        />
+      )}
       {tab === "expense" && <ExpenseEntryTab />}
       {tab === "summary" && <DailySummaryTab />}
       {tab === "reports" && <ReportsTab />}

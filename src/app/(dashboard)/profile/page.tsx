@@ -1,8 +1,11 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import RoleGuard from "@/components/RoleGuard";
 import { useStoredUser } from "@/lib/client-auth";
+import ProfileSubNav from "@/components/profile/ProfileSubNav";
+import { labelFor } from "@/components/profile/templateOptions";
 import type { Profile } from "@/lib/validators/profile";
 
 const TEMPLATE_OPTIONS: {
@@ -176,6 +179,8 @@ function ProfilePageInner() {
         </div>
       </header>
 
+      <ProfileSubNav />
+
       {error && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
@@ -186,6 +191,18 @@ function ProfilePageInner() {
           Saved.
         </p>
       )}
+
+      {/* Inline "where to change the template" hint — the picker lives
+          on its own page now, but the user might still expect it here. */}
+      <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+        Current template: <strong>{labelFor(profile.template)}</strong>.{" "}
+        <Link
+          href="/profile/template"
+          className="font-medium text-indigo-600 hover:underline"
+        >
+          Change template →
+        </Link>
+      </p>
 
       {/* General */}
       <Section
