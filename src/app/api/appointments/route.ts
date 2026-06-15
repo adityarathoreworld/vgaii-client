@@ -4,9 +4,14 @@ import { getUser } from "@/middleware/auth";
 import { checkRole, checkModule } from "@/lib/rbac";
 import { withClientFilter } from "@/lib/query";
 import { appointmentCreateSchema } from "@/lib/validators/appointment";
+import { getBookingConfig, overlapsExisting } from "@/lib/booking";
 import { logAudit } from "@/lib/audit";
 import { getErrorMessage } from "@/lib/errors";
 import { NextResponse } from "next/server";
+
+// Thrown inside the booking transaction when the chosen slot was taken by a
+// concurrent request; mapped to a 409 below.
+class SlotTakenError extends Error {}
 
 export async function POST(req: Request) {
   try {
@@ -36,22 +41,69 @@ export async function POST(req: Request) {
       }
     }
 
-    const appointment = await prisma.appointment.create({
-      data: {
-        clientId: user.clientId,
-        leadId: parsed.data.leadId ?? null,
-        name: parsed.data.name,
-        phone: parsed.data.phone,
-        email: parsed.data.email || null,
-        age: parsed.data.age ?? null,
-        gender: parsed.data.gender ?? null,
-        date: new Date(parsed.data.date),
-        notes: parsed.data.notes ?? "",
-        diagnosis: "",
-        medicines: [],
-        source: "manual",
-      },
+    // Self-hosted booking: when enabled and the caller sends a slot length
+    // (i.e. from the SlotPicker), prevent double-booking. Walk-in manual posts
+    // omit durationMin and stay exempt; the Cal.com path is unaffected.
+    const client = await prisma.client.findUnique({
+      where: { id: user.clientId },
+      select: { bookingConfig: true },
     });
+    const config = getBookingConfig(client?.bookingConfig);
+    const start = new Date(parsed.data.date);
+    const useSlot = config.enabled && parsed.data.durationMin != null;
+
+    const data: Prisma.AppointmentUncheckedCreateInput = {
+      clientId: user.clientId,
+      leadId: parsed.data.leadId ?? null,
+      name: parsed.data.name,
+      phone: parsed.data.phone,
+      email: parsed.data.email || null,
+      age: parsed.data.age ?? null,
+      gender: parsed.data.gender ?? null,
+      date: start,
+      notes: parsed.data.notes ?? "",
+      diagnosis: "",
+      medicines: [],
+      source: "manual",
+      durationMin: useSlot ? parsed.data.durationMin : null,
+    };
+
+    let appointment;
+    if (useSlot) {
+      const duration = parsed.data.durationMin!;
+      const end = new Date(start.getTime() + duration * 60000);
+      try {
+        appointment = await prisma.$transaction(async tx => {
+          // Re-check overlap inside the txn against still-scheduled appts in a
+          // window around the slot (24h back covers any reasonable duration).
+          const candidates = await tx.appointment.findMany({
+            where: {
+              clientId: user.clientId!,
+              status: "scheduled",
+              date: { gte: new Date(start.getTime() - 86_400_000), lt: end },
+            },
+            select: { date: true, durationMin: true },
+          });
+          const existing = candidates
+            .filter(c => c.date)
+            .map(c => ({ startUtc: c.date as Date, durationMin: c.durationMin }));
+          if (overlapsExisting(start, duration, existing)) {
+            throw new SlotTakenError();
+          }
+          return tx.appointment.create({ data });
+        });
+      } catch (e) {
+        if (e instanceof SlotTakenError) {
+          return NextResponse.json(
+            { error: "That slot was just booked. Pick another time." },
+            { status: 409 },
+          );
+        }
+        throw e;
+      }
+    } else {
+      appointment = await prisma.appointment.create({ data });
+    }
 
     await logAudit(req, { actorType: "user", user }, {
       action: "appointment.created",
