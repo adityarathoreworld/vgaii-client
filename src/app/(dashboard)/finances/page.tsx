@@ -6,11 +6,13 @@ import RoleGuard from "@/components/RoleGuard";
 import { useStoredUser } from "@/lib/client-auth";
 import PaymentsListTab from "@/components/finances/PaymentsListTab";
 import PresetChargesTab from "@/components/finances/PresetChargesTab";
+import ExpensePresetsTab from "@/components/finances/ExpensePresetsTab";
 import ExpenseEntryTab from "@/components/finances/ExpenseEntryTab";
 import DailySummaryTab from "@/components/finances/DailySummaryTab";
 import ReportsTab from "@/components/finances/ReportsTab";
 
 type Tab = "payment" | "expense" | "summary" | "reports" | "presets";
+type PresetSubTab = "earning" | "expense";
 
 type TabDef = {
   key: Tab;
@@ -21,7 +23,7 @@ type TabDef = {
 const TABS: TabDef[] = [
   { key: "payment", label: "Payments" },
   { key: "expense", label: "Expenses" },
-  { key: "presets", label: "Preset Charges", adminOnly: true },
+  { key: "presets", label: "Presets", adminOnly: true },
   { key: "summary", label: "Daily Summary" },
   { key: "reports", label: "Reports" },
 ];
@@ -75,6 +77,8 @@ function FinancesPageInner() {
   // first field).
   const autoOpenNew = searchParams.get("new") === "1";
 
+  const [presetSubTab, setPresetSubTab] = useState<PresetSubTab>("earning");
+
   const visibleTabs = TABS.filter(t => !t.adminOnly || isAdmin);
 
   return (
@@ -118,7 +122,35 @@ function FinancesPageInner() {
       {tab === "expense" && <ExpenseEntryTab />}
       {tab === "summary" && <DailySummaryTab />}
       {tab === "reports" && <ReportsTab />}
-      {tab === "presets" && isAdmin && <PresetChargesTab />}
+      {tab === "presets" && isAdmin && (
+        <div className="space-y-3">
+          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-sm">
+            <button
+              type="button"
+              onClick={() => setPresetSubTab("earning")}
+              className={`rounded-md px-3 py-1.5 font-medium transition ${
+                presetSubTab === "earning"
+                  ? "bg-indigo-600 text-white"
+                  : "text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              Earning presets
+            </button>
+            <button
+              type="button"
+              onClick={() => setPresetSubTab("expense")}
+              className={`rounded-md px-3 py-1.5 font-medium transition ${
+                presetSubTab === "expense"
+                  ? "bg-indigo-600 text-white"
+                  : "text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              Expense presets
+            </button>
+          </div>
+          {presetSubTab === "earning" ? <PresetChargesTab /> : <ExpensePresetsTab />}
+        </div>
+      )}
     </div>
   );
 }

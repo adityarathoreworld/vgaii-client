@@ -5,16 +5,26 @@ import useSWR from "swr";
 import {
   Banknote,
   CreditCard,
+  Plus,
   Smartphone,
   Wallet,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { rupeesToPaise, formatRupees } from "@/lib/currency";
+import { rupeesToPaise, paiseToRupees, formatRupees } from "@/lib/currency";
 import {
   EXPENSE_CATEGORIES,
   type ExpenseCategory,
   type PaymentMethod,
 } from "@/lib/constants";
+
+type ExpensePreset = {
+  id: string;
+  title: string;
+  category: ExpenseCategory;
+  amount: number;
+};
+
+type PresetsResponse = { presets: ExpensePreset[] };
 
 type Expense = {
   id: string;
@@ -78,6 +88,8 @@ const formatCategory = (c: string) =>
 export default function ExpenseEntryTab() {
   const { data, mutate } = useSWR<Response>("/api/expenses");
   const expenses = data?.expenses ?? [];
+  const { data: presetsData } = useSWR<PresetsResponse>("/api/expense-presets");
+  const presets = presetsData?.presets ?? [];
 
   const [category, setCategory] = useState<ExpenseCategory>("miscellaneous");
   const [amountInput, setAmountInput] = useState("");
@@ -86,6 +98,12 @@ export default function ExpenseEntryTab() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
+
+  const applyPreset = (p: ExpensePreset) => {
+    setCategory(p.category);
+    setAmountInput(String(paiseToRupees(p.amount)));
+    setNotes(p.title);
+  };
 
   const reset = () => {
     setCategory("miscellaneous");
@@ -132,6 +150,30 @@ export default function ExpenseEntryTab() {
       <section className="space-y-3 lg:col-span-2">
         <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
           <h2 className="text-base font-semibold text-slate-900">New expense</h2>
+
+          {presets.length > 0 && (
+            <div className="mt-3">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                Presets
+              </span>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {presets.map(p => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => applyPreset(p)}
+                    className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3 py-1.5 text-sm font-medium text-indigo-700 transition hover:bg-indigo-50"
+                  >
+                    <Plus size={12} />
+                    <span>{p.title}</span>
+                    <span className="text-xs text-slate-500">
+                      {formatRupees(p.amount)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
             <label className="block">
